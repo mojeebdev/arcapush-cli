@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 export const DEFAULT_API = "https://arcapush.com";
-export const CLI_VERSION = "0.1.0";
+export const CLI_VERSION = "0.1.1";
 
 export type JsonMode = boolean;
 
@@ -176,11 +176,30 @@ function gitRemote(dir: string): string | null {
 const LOGO_CANDIDATES = [
   "public/logo.svg",
   "public/logo.png",
+  "public/logo.webp",
+  "public/logo.jpg",
   "public/icon.svg",
+  "public/icon.png",
+  "public/favicon.svg",
+  "public/favicon.png",
   "public/favicon.ico",
   "logo.svg",
   "logo.png",
+  "logo.webp",
+  "logo.jpg",
 ];
+
+function publicAssetUrl(homepage: string, assetPath: string): string {
+  if (!homepage || !assetPath) return "";
+  try {
+    const base = new URL(homepage);
+    if (base.protocol !== "https:" && base.protocol !== "http:") return "";
+    const publicPath = assetPath.startsWith("public/") ? assetPath.slice("public/".length) : assetPath;
+    return new URL(`/${publicPath.replace(/^\/+/, "")}`, base.origin).toString();
+  } catch {
+    return "";
+  }
+}
 
 export interface DetectedProject {
   name: string;
@@ -188,6 +207,7 @@ export interface DetectedProject {
   website: string;
   repositoryUrl: string;
   logoPath: string;
+  logoUrl: string;
   category: string;
   found: string[];
 }
@@ -213,6 +233,7 @@ export function detectProject(dir = cwd()): DetectedProject {
 
   const logoPath = LOGO_CANDIDATES.find((candidate) => existsSync(join(dir, candidate))) ?? "";
   if (logoPath) found.push(logoPath);
+  const logoUrl = publicAssetUrl(homepage, logoPath);
 
   return {
     name: String(pkg?.name ?? heading(readme ?? "") ?? "").replace(/^@[^/]+\//, ""),
@@ -220,6 +241,7 @@ export function detectProject(dir = cwd()): DetectedProject {
     website: homepage,
     repositoryUrl: remote || repoFromPkg,
     logoPath,
+    logoUrl,
     category: "Developer Tools",
     found,
   };
@@ -274,5 +296,3 @@ export function parseArgs(argv: string[]): { command: string; flags: Record<stri
   }
   return { command, flags };
 }
-
-
