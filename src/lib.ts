@@ -6,7 +6,7 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 export const DEFAULT_API = "https://arcapush.com";
-export const CLI_VERSION = "0.1.1";
+export const CLI_VERSION = "0.1.2";
 
 export type JsonMode = boolean;
 
