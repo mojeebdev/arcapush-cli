@@ -77,7 +77,7 @@ After a successful submit, the CLI writes `arcapush.json` with the listing id an
 
 ## Requirements
 
-Node.js 18 or later.
+Node.js 22 or later.
 
 ## Docs and support
 
