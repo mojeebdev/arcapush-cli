@@ -117,9 +117,10 @@ async function submit(json: boolean, force = false): Promise<void> {
   const problemStatement = json
     ? (detected.tagline || `${name} is a ${category} product.`)
     : await ask("What problem does it solve?", detected.tagline);
+  const logoUrl = json ? detected.logoUrl : await ask("Logo / product image URL", detected.logoUrl);
 
   if (!json) {
-    process.stdout.write(`\nProduct: ${name}\nTagline: ${tagline}\nWebsite: ${website}\nGitHub: ${repositoryUrl}\nLogo: ${detected.logoPath || "none"}\nCategory: ${category}\n\n`);
+    process.stdout.write(`\nProduct: ${name}\nTagline: ${tagline}\nWebsite: ${website}\nGitHub: ${repositoryUrl}\nLogo: ${logoUrl || detected.logoPath || "none"}\nCategory: ${category}\n\n`);
     if (!(await confirm("Continue?"))) fail("Cancelled.", false);
   }
 
@@ -135,6 +136,7 @@ async function submit(json: boolean, force = false): Promise<void> {
     category,
     website,
     repositoryUrl: repositoryUrl || undefined,
+    logoUrl: logoUrl || undefined,
     force,
   };
 
@@ -170,7 +172,7 @@ async function submit(json: boolean, force = false): Promise<void> {
   writeLinkedProduct({
     productId: String(result.data.id ?? ""),
     slug: String(result.data.slug ?? ""),
-    type: "product",
+    type,
   });
 
   ok(
@@ -299,7 +301,11 @@ async function menu(): Promise<void> {
   if (choice === "2") return update(false);
   if (choice === "3") return status(false);
   if (choice === "4") return openListing(false);
-  if (choice === "5") return readStoredToken() ? logout(false) : login(false);
+  if (choice === "5") {
+    if (readStoredToken()) return logout(false);
+    await login(false);
+    return menu();
+  }
   return submit(false);
 }
 
@@ -321,7 +327,11 @@ async function main(): Promise<void> {
 
   try {
     if (!command) return menu();
-    if (command === "login") return login(json);
+    if (command === "login") {
+      await login(json);
+      if (!json) return menu();
+      return;
+    }
     if (command === "logout") return logout(json);
     if (command === "submit") return submit(json, Boolean(flags.force));
     if (command === "update") return update(json);
