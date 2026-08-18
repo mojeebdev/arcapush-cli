@@ -1,0 +1,47 @@
+{
+  "name": "@blindspotlab/arcapush",
+  "version": "0.1.0",
+  "description": "Submit and manage your products on Arcapush directly from your terminal.",
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
+  "type": "module",
+  "bin": {
+    "arcapush": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mojeebdev/arcapush-cli.git"
+  },
+  "homepage": "https://arcapush.com",
+  "bugs": {
+    "url": "https://github.com/mojeebdev/arcapush-cli/issues"
+  },
+  "keywords": [
+    "arcapush",
+    "cli",
+    "startup",
+    "product-discovery",
+    "developer-tools",
+    "product-launch",
+    "distribution",
+    "founders"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "prepack": "npm run build"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.11",
+    "typescript": "^5.6.0"
+  }
+}
