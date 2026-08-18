@@ -1,0 +1,51 @@
+name: Publish Arcapush CLI
+
+# Publishes @blindspotlab/arcapush to npm using npm Trusted Publishing (OIDC).
+# No NPM_TOKEN / NODE_AUTH_TOKEN is used — authentication is performed via the
+# GitHub Actions OIDC id-token exchange (requires npm >= 11.5.1; we pin >= 11.15.0).
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+
+      - name: Set up Node.js 24
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          # Package-manager caching is intentionally disabled for release builds
+          # (no `cache:` input) to guarantee a clean, reproducible install.
+
+      - name: Ensure npm is new enough for Trusted Publishing (OIDC)
+        run: |
+          npm install -g "npm@^11.15.0"
+          node --version
+          npm --version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Pack (dry run)
+        run: npm pack --dry-run
+
+      - name: Publish to npm (Trusted Publishing / OIDC)
+        run: npm publish --access public
