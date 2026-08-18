@@ -1,6 +1,6 @@
 {
   "name": "@blindspotlab/arcapush",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Submit and manage your products on Arcapush directly from your terminal.",
   "license": "MIT",
   "publishConfig": {
