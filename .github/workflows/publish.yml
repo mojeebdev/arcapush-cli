@@ -1,8 +1,12 @@
 name: Publish Arcapush CLI
+# Releases come from a tag naming the exact package version (vX.Y.Z), or a
+# manual run on main. scripts/release-preflight.mjs enforces both, checks the
+# shown CLI version, lockfile and CHANGELOG section, and refuses to overwrite
+# a published version. Every CI publish uses the npm `next` tag; promoting to
+# `latest` is a separate maintainer step after live production checks.
 on:
   push:
     tags: ['v*']
-    branches: ['release/0.2.0']
   workflow_dispatch:
 permissions:
   contents: write
@@ -49,4 +53,4 @@ jobs:
           if [ "$RELEASE_CHANNEL" = "next" ]; then OPTIONS+=(--prerelease); fi
           gh release create "$TAG" --target "$GITHUB_SHA" \
             --title "Arcapush CLI $RELEASE_VERSION: CLI + MCP" \
-            --notes-file CHANGELOG.md "${OPTIONS[@]}"
+            --notes-file release-notes.md "${OPTIONS[@]}"

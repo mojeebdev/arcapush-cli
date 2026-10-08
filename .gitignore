@@ -22,3 +22,4 @@ Thumbs.db
 # Local drafts and package tarballs
 .arcapush-submission.json
 *.tgz
+release-notes.md

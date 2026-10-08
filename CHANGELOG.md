@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.2.1 — 2026-10-08
+
+Patch release. Published npm 0.2.0 cannot be changed, so the corrections ship here.
+
+### Fixed
+
+- LICENSE now opens with the project notice "Copyright 2026 BlindspotLab Limited", followed by the unchanged Apache License 2.0 text. NOTICE, LICENSE-MIT-LEGACY and third-party notices are unchanged.
+
+### Changed
+
+- Release process is version-generic: releases come from a `vX.Y.Z` tag or a manual run on `main` (the `release/0.2.0` branch trigger is removed). The preflight checks the tag, the shown CLI version, the lockfile and the CHANGELOG section, keeps the existing-version checksum check, and GitHub release notes contain only this version's section.
+- Every CI publish stays on the npm `next` tag. Promotion to `latest` is a separate maintainer step after the production companion API is deployed and live checks pass.
+
+### Release requirements
+
+Same as 0.2.0: deploy and verify the companion Arcapush API first. Install explicitly with `npm install -g @blindspotlab/arcapush@0.2.1`.
+
 ## 0.2.0 — 2026-10-08
 
 Arcapush can now be submitted to from a guided terminal flow or a connected AI agent.

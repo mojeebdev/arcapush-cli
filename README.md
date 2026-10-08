@@ -6,7 +6,7 @@ Submit products, AI agents and hackathon builds from a guided terminal flow or a
 
 ## Release prerequisite
 
-CLI **0.2.0** requires the companion Arcapush submission API update. Deploy and test that update before promoting this package to the stable npm tag. The initial 0.2.0 release uses the `next` tag for staging. An older server returns an actionable compatibility error; the CLI does not silently fall back to the product-only endpoint.
+CLI **0.2.x** requires the companion Arcapush submission API update. Deploy and test that update before promoting this package to the stable npm tag. Until then, 0.2.x is published under the `next` tag and `latest` stays on 0.1.2; install it with an explicit version. An older server returns an actionable compatibility error; the CLI does not silently fall back to the product-only endpoint.
 
 The CLI version is independent of the web application's 0.4.0 version.
 
@@ -15,7 +15,8 @@ The CLI version is independent of the web application's 0.4.0 version.
 Install this release:
 
 ```sh
-npm install -g @blindspotlab/arcapush@0.2.0
+npm install -g @blindspotlab/arcapush@0.2.1
+arcapush --version
 arcapush login
 arcapush
 ```
@@ -186,9 +187,15 @@ npm.cmd pack --dry-run
 
 ```
 
-The package's `prepack` hook builds `dist`. Verify npm does not already contain version 0.2.0 before publishing; bump the version in both `package.json` and `src/lib.ts` if needed, and refresh the lockfile.
+The package's `prepack` hook builds `dist`. Published npm versions are immutable. For a new release, run `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and the lockfile), set the same `CLI_VERSION` in `src/lib.ts`, and add a `## X.Y.Z` section to CHANGELOG.md.
 
-The Publish workflow supports version tags, manual dispatch, and the explicit `release/0.2.0` branch. It runs checks, publishes with npm Trusted Publishing, and creates a GitHub release from CHANGELOG.md. The initial 0.2.0 release uses the `next` npm tag until live backend checks are complete; install 0.2.0 explicitly for staging. Do not publish the same version locally and through CI.
+The Publish workflow runs on a tag that names the exact version (`vX.Y.Z`) or a manual run on `main`. `scripts/release-preflight.mjs` checks the tag, the shown CLI version, the lockfile and the CHANGELOG section, and refuses to overwrite a published version (an identical re-run is skipped). It publishes with npm Trusted Publishing and provenance under the `next` tag, and creates a GitHub prerelease whose notes are that version's CHANGELOG section. Promote to `latest` separately, with a maintainer account, only after the production companion API is deployed and live sign-in, upload and submission checks pass:
+
+```sh
+npm dist-tag add @blindspotlab/arcapush@X.Y.Z latest
+```
+
+Do not publish the same version locally and through CI.
 
 For PowerShell execution-policy errors, use `npm.cmd`/`npx.cmd` or `node dist/cli.js`; do not weaken your system execution policy.
 
