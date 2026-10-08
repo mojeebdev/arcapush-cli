@@ -1,0 +1,22 @@
+ ███  ████   ████  ███  ████  █   █  ████ █   █
+█   █ █   █ █     █   █ █   █ █   █ █     █   █
+█████ ████  █     █████ ████  █   █  ███  █████
+█   █ █  █  █     █   █ █     █   █     █ █   █
+█   █ █   █  ████ █   █ █      ███  ████  █   █
+
+Good products deserve to be discovered.
+CLI + MCP  ·  Products / AI agents / Hackathon builds
+
+   01  Connect your Arcapush account
+›  02  Choose what you are shipping
+   03  Add details and media
+   04  Review and submit
+
+◉ Product    ○ AI agent    ○ Hackathon build
+
+────────────────────────────────────────────────────────────────────────────────────────
+Using an AI agent? Run arcapush mcp
+Review your submission before anything is sent.
+v0.2.3  |  arcapush --help for all commands
+
+Arrow keys to choose · Enter to continue · Esc to cancel

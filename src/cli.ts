@@ -6,13 +6,13 @@ import { randomUUID } from 'node:crypto';
 import { api, apiBase, ask, clearStoredToken, CLI_VERSION, confirm, detectProject, openUrl, readLinkedProduct, readStoredToken, writeLinkedProduct, writeStoredToken } from './lib.js';
 import { ApiError, getListing, getSchema, parseSubmission, readSubmission, request, saveSubmission, sendSubmission, validateSubmission, type ListingType, type Payload, type SubmissionInput } from './submissions.js';
 import { reviewLocalMedia, withoutLocalMedia, uploadLocalMedia } from './media.js';
-import { banner, terminalText } from './ui.js';
+import { banner, chooseListingType, OnboardingCancelled, showOnboarding, terminalText } from './ui.js';
 
 const HELP = `Arcapush CLI ${CLI_VERSION}
 Good products deserve to be discovered.
 
 Usage:
-  arcapush                       Guided onboarding / menu
+  arcapush                       Open guided submission onboarding
   arcapush login [--no-browser]   Authorize this device in your browser
   arcapush logout                Revoke this device's token
   arcapush submit [--type product|agent|hackathon]
@@ -84,24 +84,22 @@ async function login(flags: Flags): Promise<void> {
   throw new Error('Authorization timed out. Run arcapush login again.');
 }
 
-async function wizard(typeFlag?: string): Promise<SubmissionInput> {
+async function wizard(typeFlag?: string, ascii = false): Promise<SubmissionInput> {
   interactive();
-  const schema = await getSchema();
+  showOnboarding(2, undefined, ascii);
   const draftFile = '.arcapush-submission.json';
   const resumed = !typeFlag && existsSync(draftFile) && await confirm('Resume the saved submission?', true) ? readSubmission(draftFile) : null;
   const previousPayload = resumed ? JSON.stringify(resumed.payload) : null;
   const previousContext = resumed?.contextId;
   let type = (resumed?.type || typeFlag) as ListingType | undefined;
-  if (!type) {
-    print(null, false, ['What are you shipping?', '  1) Product', '  2) AI agent', '  3) Hackathon build']);
-    const choice = await ask('Choose', '1');
-    type = ({ '1': 'product', '2': 'agent', '3': 'hackathon' } as Record<string, ListingType>)[choice];
-  }
+  if (!type) type = await chooseListingType(ascii);
+  const schema = await getSchema();
   if (!type || !schema.types[type]) throw new Error('Choose product, agent, or hackathon.');
   const detected = detectProject();
   const input = resumed || parseSubmission({ type, payload: {} });
   const spec = schema.types[type];
   const defaults: Payload = { name: detected.name, tagline: detected.tagline, website: detected.website, agentUrl: detected.website, productUrl: detected.website, repositoryUrl: detected.repositoryUrl, githubUrl: detected.repositoryUrl, ...input.payload };
+  showOnboarding(3, type, ascii);
   print(null, false, ['Local metadata detected. Check all suggestions before submitting.', ...detected.found.map(x => `  ${x}`), 'Optional fields: Enter to skip. Type - to clear a suggested value.']);
   for (const [index, step] of spec.steps.entries()) {
     if (step.id === 'review') break;
@@ -144,18 +142,21 @@ async function wizard(typeFlag?: string): Promise<SubmissionInput> {
 
 async function submit(flags: Flags): Promise<void> {
   const json = Boolean(flags.json);
+  const guided = !json && !flags.input && Boolean(process.stdin.isTTY && process.stdout.isTTY);
   if (!readStoredToken()) {
     if (json || flags.input || !process.stdin.isTTY) throw new Error('Run arcapush login first.');
+    if (guided) showOnboarding(1, undefined, Boolean(flags.ascii));
     if (!await confirm('Connect your Arcapush account?', true)) return;
     await login(flags);
   }
   if (json && !flags.input) throw new Error('--json submit requires --input FILE. It never invents submission fields.');
-  const input = flags.input ? readSubmission(String(flags.input)) : await wizard(flags.type as string | undefined);
+  const input = flags.input ? readSubmission(String(flags.input)) : await wizard(flags.type as string | undefined, Boolean(flags.ascii));
   // Persist the UUID before any network write, making retries of this file stable.
   if (flags.input && !flags['dry-run']) saveSubmission(String(flags.input), input);
   const root = String(flags['project-dir'] || process.cwd());
   const localFiles = reviewLocalMedia(input, root);
   const validation = await validateSubmission(localFiles.length ? withoutLocalMedia(input) : input);
+  if (guided) showOnboarding(4, input.type, Boolean(flags.ascii));
   if (flags['dry-run']) { print({ success: true, ...validation, submission: input, localFiles, uploadsPending: localFiles.length > 0 }, json, ['Fields validated; local files inspected without uploading. No listing or server draft was created.', JSON.stringify(input, null, 2)]); return; }
   if (!json) print(null, false, ['\nReview your submission', JSON.stringify(input, null, 2), ...(localFiles.length ? ['Local files will be uploaded after confirmation:', JSON.stringify(localFiles, null, 2)] : []), input.type === 'product' ? 'This product will be queued for review.' : 'The current website policy publishes agents and hackathon builds immediately.']);
   if (!flags.yes) { interactive(); if (!await confirm('Submit this listing to Arcapush?', false)) { print(null, json, ['Cancelled. Your local draft is saved.']); return; } }
@@ -196,7 +197,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command === 'mcp') { const { startMcp } = await import('./mcp.js'); await startMcp(typeof flags['project-dir'] === 'string' ? flags['project-dir'] : process.env.ARCAPUSH_PROJECT_DIR); return; }
   if (command === 'mcp-config') { print({ mcpServers: { arcapush: { command: 'arcapush', args: ['mcp'] } } }, true); return; }
   if (command === 'schema') { const schema = await getSchema(); print(schema, json, [JSON.stringify(schema, null, 2)]); return; }
-  if (!json && process.stdout.isTTY && ['', 'submit', 'login'].includes(command)) banner(Boolean(flags.ascii));
+  if (!json && process.stdout.isTTY && command === 'login') banner(Boolean(flags.ascii));
   if (command === 'login') return login(flags);
   if (command === 'logout') {
     const token = readStoredToken();
@@ -217,17 +218,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command) throw new Error(`Unknown command: ${command}`);
   if (json) throw new Error('Choose a command with --json.');
   interactive();
-  print(null, false, ['  1) Submit a build', '  2) Check listing status', '  3) Connect your account', '  4) Set up your AI agent', '  5) Open dashboard']);
-  const choice = await ask('Choose', '1');
-  if (choice === '1') return submit(flags);
-  if (choice === '2') return status(false);
-  if (choice === '3') return login(flags);
-  if (choice === '4') return main(['mcp-config']);
-  if (choice === '5') { print(null, false, [`${apiBase()}/dashboard`]); try { openUrl(`${apiBase()}/dashboard`); } catch {} return; }
-  throw new Error('Choose an option from 1 to 5.');
+  return submit(flags);
 }
 
 void main().catch(error => {
+  if (error instanceof OnboardingCancelled) { process.stderr.write(`${error.message}\n`); process.exitCode = 130; return; }
   const details = error instanceof ApiError ? { status: error.status, details: error.details } : {};
   if (process.argv.includes('--json')) print({ success: false, error: error instanceof Error ? error.message : 'Command failed.', ...details }, true);
   else process.stderr.write(`${terminalText(error instanceof Error ? error.message : 'Command failed.')}\n`);

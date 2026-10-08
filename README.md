@@ -2,7 +2,7 @@
 
 **Good products deserve to be discovered.**
 
-Get your product, AI agent or hackathon build onto [Arcapush](https://arcapush.com) from your terminal. Use the guided menu, submit a reviewed JSON file, or connect an MCP-compatible AI assistant.
+Get your product, AI agent or hackathon build onto [Arcapush](https://arcapush.com) from your terminal. Follow the guided onboarding, submit a reviewed JSON file, or connect an MCP-compatible AI assistant.
 
 [Website](https://arcapush.com) · [Documentation](https://arcapush.com/docs) · [Latest release](https://github.com/mojeebdev/arcapush-cli/releases/latest) · [npm](https://www.npmjs.com/package/@blindspotlab/arcapush)
 
@@ -16,15 +16,16 @@ arcapush --version
 arcapush
 ```
 
-**Yes: typing `arcapush` opens the interactive CLI.** It shows the violet ARCAPUSH wordmark, your installed version, and this menu:
+**Typing `arcapush` opens the guided onboarding.** A violet block-letter ARCAPUSH wordmark sits above four visible stages:
 
-1. Submit a build
-2. Check listing status
-3. Connect your account
-4. Set up your AI agent
-5. Open dashboard
+1. Connect your Arcapush account
+2. Choose what you are shipping
+3. Add details and media
+4. Review and submit
 
-Use `arcapush --ascii` for an ASCII wordmark. Narrow terminals show a compact logo; `NO_COLOR=1` disables colour. The interactive menu needs a terminal; automation uses explicit commands or MCP.
+Already connected? You start at stage 2. Use the arrow keys or Tab to select **Product**, **AI agent** or **Hackathon build**, then press Enter. Escape or Ctrl+C cancels the selector. Saved drafts can be resumed before choosing a type. Details follow the current server schema, including optional agent passport fields, and you review before confirming publication.
+
+Use `arcapush --ascii` for ASCII characters. Narrow terminals keep a smaller block-letter logo and stack the type choices. `NO_COLOR=1` disables colour; `TERM=dumb` uses numbered line input. Your terminal controls the window background and font. Interactive onboarding needs a terminal; automation uses explicit commands or MCP. Other actions remain available through `arcapush status`, `arcapush login`, `arcapush open` and `arcapush mcp-config`.
 
 To run the current stable version without a global install:
 
@@ -32,7 +33,7 @@ To run the current stable version without a global install:
 npx --yes @blindspotlab/arcapush@latest
 ```
 
-This package release is **0.2.2**. The CLI and website have separate version numbers.
+This package release is **0.2.3**. The CLI and website have separate version numbers.
 
 ### Still seeing the old menu?
 
@@ -126,7 +127,7 @@ Alternatively, use the pinned package without a global install:
   "mcpServers": {
     "arcapush": {
       "command": "npx",
-      "args": ["-y", "@blindspotlab/arcapush@0.2.2", "mcp"]
+      "args": ["-y", "@blindspotlab/arcapush@0.2.3", "mcp"]
     }
   }
 }

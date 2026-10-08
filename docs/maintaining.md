@@ -11,6 +11,8 @@ npm test
 npm pack --dry-run
 ```
 
+For onboarding changes, also run `python3 scripts/test-terminal.py` after building on Linux or macOS. This drives the executable through a real pseudo-terminal against a local mock API, checking type selection, saved drafts, review cancellation, narrow layouts and terminal cleanup. It does not publish a production listing.
+
 Run `node dist/cli.js` to try the compiled interface, or `npm link` to make your local checkout available as `arcapush`. A linked checkout overrides the registry install until you replace it.
 
 ## Production API

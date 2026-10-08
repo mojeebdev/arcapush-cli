@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { once } from 'node:events';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
-import { wordmark, terminalText } from '../dist/ui.js';
+import { wordmark, terminalText, onboardingScreen } from '../dist/ui.js';
 import { apiBase, readStoredToken, writeStoredToken, clearStoredToken, detectProject } from '../dist/lib.js';
 
 const cli = resolve('dist/cli.js');
@@ -46,10 +46,24 @@ const input = type => ({ type, payload: { name: 'Test build', tagline: 'A useful
 
 test.after(async () => { server.close(); await once(server, 'close'); rmSync(temp, { recursive: true, force: true }); });
 test('wordmark fits narrow and wide terminals; terminal control sequences are stripped', () => {
-  assert.equal(wordmark(40), 'ARCAPUSH');
-  assert.equal(wordmark(80, true).split('\n').length, 6);
+  assert.equal(wordmark(40).split('\n').length, 5);
+  assert.ok(wordmark(40).split('\n').every(x => x.length === 31));
+  assert.equal(wordmark(80, true).split('\n').length, 5);
   assert.ok(wordmark(80, true).split('\n').every(x => x.length === 47));
   assert.ok(!terminalText('\x1b[2Junsafe').includes('\x1b'));
+});
+test('onboarding keeps four stages and type selection readable at narrow widths', () => {
+  const shortScreen = onboardingScreen(2, 'product', { width: 40, height: 21, color: false });
+  assert.ok(shortScreen.trimEnd().split('\n').length <= 21, 'Logo would scroll off a 24-row terminal');
+  for (const width of [20, 32, 40, 47, 80, 120]) {
+    const screen = onboardingScreen(2, 'agent', { width, color: false, ascii: true });
+    assert.ok(screen.split('\n').every(line => line.length <= width), `Overflow at ${width} columns`);
+    assert.match(screen, />  02/);
+    assert.match(screen, /\(\*\) AI agent/);
+    assert.ok(!screen.includes('\x1b'));
+    assert.ok(!/[^\x00-\x7f]/.test(screen));
+    assert.ok(!screen.includes('Submit a build'));
+  }
 });
 test('metadata suggestions strip repository credentials and query secrets', () => {
   const dir = mkdtempSync(join(temp, 'metadata-'));

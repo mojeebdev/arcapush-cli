@@ -1,6 +1,6 @@
 {
   "name": "@blindspotlab/arcapush",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Submit products, AI agents and hackathon builds to Arcapush from your terminal or MCP client.",
   "license": "Apache-2.0",
   "publishConfig": {

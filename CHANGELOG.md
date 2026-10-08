@@ -1,5 +1,19 @@
 # Changelog
 
+## 0.2.3 — 2026-10-08
+
+### Fixed
+
+- Bare `arcapush` now opens the approved four-stage onboarding: connect an account, choose a build type, add details and media, then review and submit.
+- Replace the five-action opening menu with a Product / AI agent / Hackathon build selector supporting arrow keys, Tab, number shortcuts and Enter. Existing commands remain available through `arcapush --help`.
+- Match the violet block-letter header, active-stage marker, radio choices, MCP hint and review reminder. Narrow terminals use smaller block letters and stacked choices; resize redraws the selector.
+- Preserve readable ASCII/no-colour output and a numbered-input fallback for dumb terminals. Restore terminal input and cursor state on selection or cancellation.
+- Keep server-driven fields, saved drafts, explicit submission approval, local-media upload safeguards and clean JSON/MCP output.
+
+### Verification
+
+- Add width and plain-output checks plus `python3 scripts/test-terminal.py`, a real-terminal smoke test using a local mock API. No production submission is needed for this test.
+
 ## 0.2.2 — 2026-10-08
 
 Stable public release of the CLI and local MCP server.
