@@ -2,11 +2,12 @@ name: Publish Arcapush CLI
 # Releases come from a tag naming the exact package version (vX.Y.Z), or a
 # manual run on main. scripts/release-preflight.mjs enforces both, checks the
 # shown CLI version, lockfile and CHANGELOG section, and refuses to overwrite
-# a published version. Every CI publish uses the npm `next` tag; promoting to
-# `latest` is a separate maintainer step after live production checks.
+# a published version. Stable versions publish to npm latest and GitHub Latest.
 on:
   push:
+    branches: [main]
     tags: ['v*']
+    paths: ['package.json']
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,6 +38,18 @@ jobs:
         env:
           RELEASE_CHANNEL: ${{ steps.release.outputs.channel }}
         run: npm publish --access public --tag "$RELEASE_CHANNEL" --provenance
+      - name: Verify the stable npm release
+        env:
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          for attempt in 1 2 3 4 5 6; do
+            LATEST=$(npm view @blindspotlab/arcapush dist-tags.latest)
+            if [ "$LATEST" = "$RELEASE_VERSION" ]; then exit 0; fi
+            sleep 5
+          done
+          echo "npm latest is $LATEST, expected $RELEASE_VERSION. Repair the tag before rerunning."
+          exit 1
       - name: Create release with human and agent-readable notes
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,11 +59,11 @@ jobs:
         run: |
           TAG="v$RELEASE_VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release already exists."
-            exit 0
+            gh release edit "$TAG" --prerelease=false --latest \
+              --title "Arcapush CLI $RELEASE_VERSION: CLI + MCP" \
+              --notes-file release-notes.md
+          else
+            gh release create "$TAG" --target "$GITHUB_SHA" --latest \
+              --title "Arcapush CLI $RELEASE_VERSION: CLI + MCP" \
+              --notes-file release-notes.md
           fi
-          OPTIONS=()
-          if [ "$RELEASE_CHANNEL" = "next" ]; then OPTIONS+=(--prerelease); fi
-          gh release create "$TAG" --target "$GITHUB_SHA" \
-            --title "Arcapush CLI $RELEASE_VERSION: CLI + MCP" \
-            --notes-file release-notes.md "${OPTIONS[@]}"

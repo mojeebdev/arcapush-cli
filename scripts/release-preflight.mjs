@@ -33,11 +33,9 @@ const section = changelog.slice(start);
 const nextHeading = section.slice(1).search(/^## /m);
 writeFileSync('release-notes.md', (nextHeading < 0 ? section : section.slice(0, nextHeading + 1)).trim() + '\n');
 
-// Every CI publish goes to next. Promotion to latest is a separate,
-// deliberate maintainer step (npm dist-tag) after the production companion
-// API is deployed AND live sign-in, upload and submission checks pass. A
-// schema response alone is never treated as readiness; it is logged only.
-const channel = 'next';
+// Stable releases are explicitly authorized by the owner. Plain x.y.z versions
+// publish to latest; a public schema check does not prove authenticated readiness.
+const channel = 'latest';
 let apiAdvertisesUploads = false;
 try {
   const response = await fetch('https://arcapush.com/api/v1/cli/submissions', { signal: AbortSignal.timeout(10000), redirect: 'error' });

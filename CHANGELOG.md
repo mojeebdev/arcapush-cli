@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.2.2 — 2026-10-08
+
+Stable public release of the CLI and local MCP server.
+
+### Changed
+
+- Public README leads with installation, upgrading, the interactive menu, submissions and MCP setup. Contributor and release instructions live in docs/maintaining.md.
+- Explain why a local npm install does not update the global `arcapush` command, with Windows/Git Bash troubleshooting and an explicit latest-version launch.
+- Stable releases publish directly to npm `latest` and create or update a stable GitHub release marked Latest. Approved package-version changes on main trigger publication; version tags and manual runs remain supported.
+- Check the npm latest tag before publishing GitHub release metadata so the two release channels cannot silently diverge.
+
+### Interface and compatibility
+
+Running `arcapush` opens the existing violet wordmark and menu for submitting a build, checking status, connecting an account, setting up an AI agent and opening the dashboard. This interface was already included in 0.2.0 and 0.2.1; an older global executable shows the legacy menu until upgraded. Commands, API contracts and MCP tools remain compatible with 0.2.1.
+
+
 ## 0.2.1 — 2026-10-08
 
 Patch release. Published npm 0.2.0 cannot be changed, so the corrections ship here.

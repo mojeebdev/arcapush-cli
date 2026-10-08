@@ -1,60 +1,64 @@
 # Arcapush CLI + MCP
 
-Good products deserve to be discovered.
+**Good products deserve to be discovered.**
 
-Submit products, AI agents and hackathon builds from a guided terminal flow or an MCP-compatible AI agent. Package: `@blindspotlab/arcapush`, executable: `arcapush`, Node.js **22+**.
+Get your product, AI agent or hackathon build onto [Arcapush](https://arcapush.com) from your terminal. Use the guided menu, submit a reviewed JSON file, or connect an MCP-compatible AI assistant.
 
-## Release status
+[Website](https://arcapush.com) · [Documentation](https://arcapush.com/docs) · [Latest release](https://github.com/mojeebdev/arcapush-cli/releases/latest) · [npm](https://www.npmjs.com/package/@blindspotlab/arcapush)
 
-The production Arcapush API that CLI **0.2.x** needs is live at **https://arcapush.com** (Cloudflare Workers, deployed 2026-10-08). CLI **0.2.1** is checked against it.
+## Install and open
 
-| npm tag | Version | Notes |
-| --- | --- | --- |
-| `latest` | 0.1.2 | Product-only legacy CLI. |
-| `next` | 0.2.0 | Superseded by 0.2.1. |
-| — | **0.2.1** | Prepared, not yet published. Publishes to `next`, then is promoted to `latest` after a live sign-in and submission check. |
-
-Until 0.2.1 is promoted, install it with an explicit version. The CLI version is independent of the web application's 0.4.0 version.
-
-## Install and connect
-
-Install this release:
+Requires **Node.js 22 or newer**. Install or upgrade the global command:
 
 ```sh
-npm install -g @blindspotlab/arcapush@0.2.1
+npm install -g @blindspotlab/arcapush@latest
 arcapush --version
-arcapush login
 arcapush
 ```
 
-Or run it without installing:
+**Yes: typing `arcapush` opens the interactive CLI.** It shows the violet ARCAPUSH wordmark, your installed version, and this menu:
+
+1. Submit a build
+2. Check listing status
+3. Connect your account
+4. Set up your AI agent
+5. Open dashboard
+
+Use `arcapush --ascii` for an ASCII wordmark. Narrow terminals show a compact logo; `NO_COLOR=1` disables colour. The interactive menu needs a terminal; automation uses explicit commands or MCP.
+
+To run the current stable version without a global install:
 
 ```sh
-npx @blindspotlab/arcapush@0.2.1 login
-npx @blindspotlab/arcapush@0.2.1 submit
+npx --yes @blindspotlab/arcapush@latest
 ```
 
-Before publishing, from this repository:
+This package release is **0.2.2**. The CLI and website have separate version numbers.
+
+### Still seeing the old menu?
+
+`npm install @blindspotlab/arcapush` installs into the current project's `node_modules`. It does **not** upgrade the global `arcapush` executable. Run the global install above, or use the explicit `npx` command.
+
+In Windows PowerShell, use `npm.cmd` and `npx.cmd` if execution policy blocks the `.ps1` wrappers:
+
+```powershell
+npm.cmd install -g @blindspotlab/arcapush@latest
+arcapush.cmd --version
+arcapush.cmd
+```
+
+If the version is still old, locate competing installations with `where.exe arcapush` on Windows or `type -a arcapush` in Git Bash/macOS/Linux. In Git Bash, run `hash -r` after upgrading. A previous `npm link`, another Node installation or an older npm directory on PATH can select a different executable. `npx --yes @blindspotlab/arcapush@latest` explicitly selects the stable package.
+
+## Connect your account
 
 ```sh
-npm ci
-npm test
-npm link
 arcapush login
-arcapush
 ```
 
-`arcapush` shows the violet ARCAPUSH block wordmark and a numbered onboarding menu. Use `--ascii` for plain ASCII characters. Small terminals use a compact wordmark. `NO_COLOR=1`, redirected output and JSON mode do not emit color escapes. MCP never emits the banner.
+Your browser opens so you can sign in and approve this device. If it does not open, follow the URL and code printed in the terminal. Use `arcapush login --no-browser` to show the link without launching a browser.
 
-Login opens your browser and displays a verification URL and code. Complete normal web sign-in, eligibility/onboarding, and device approval. `arcapush login --no-browser` displays the URL without opening a browser. A browser is required for authentication; agents do not log in on your behalf.
+Arcapush accounts are for people aged 18 or older. Complete any age declaration yourself in the browser. When upgrading from the legacy CLI, sign in again to approve the submission permissions. Manage or revoke connected devices in [Dashboard → CLI sessions](https://arcapush.com/dashboard/cli).
 
-Existing CLI users must log in again to approve the new `submission:create` and `submission:read:own` scopes. Old tokens are not silently upgraded. Accounts restricted by the website remain restricted in the API. Arcapush accounts are 18+. Complete the declaration yourself in the browser; OAuth login does not establish adulthood.
-
-A token that was revoked (from `/dashboard/cli` or `arcapush logout`) or has expired returns `token_invalid`; the CLI says so and asks you to run `arcapush login` again.
-
-Eligibility errors keep their machine-readable code in JSON/MCP error details: `declaration_required` means open your configured Arcapush origin’s `/dashboard` in a browser; `account_paused` or `not_eligible` means use the support/review options there. Do not retry by changing credentials or asking an agent to declare your age. `scope_missing` requires signing in again to grant the new permissions. Public browsing and the public submission schema remain open. Token revocation remains available while paused.
-
-## Guided submission
+## Submit a build
 
 Run inside your project directory:
 
@@ -64,49 +68,45 @@ arcapush submit --type agent
 arcapush submit --type hackathon
 ```
 
-The CLI gets fields, categories, media limits and step order from the server:
+The wizard guides you through the name, description, category, links, media and builder details. AI agents can also include optional passport information. It suggests metadata from your local package, README and git remote; review and edit those suggestions before confirming.
 
-1. Basics: name, tagline, category.
-2. Description: the problem solved or idea behind the build.
-3. Links / Access: homepage, repository and optional supporting links.
-4. Brand & media: logo, cover, screenshots and videos, by URL or local file.
-5. Passport, for agents only: optional ERC-8004 identity and protocol endpoints.
-6. Builder: the public attribution fields required by that listing type.
-7. Review: validate and confirm the exact submission.
+- Submit products, AI agents and hackathon builds.
+- Add media through public links or local files.
+- Save and resume a local draft in `.arcapush-submission.json`.
+- Review the full submission before sending it.
+- Check the returned status and open your dashboard afterwards.
 
-Products omit Passport, so they have six steps. Public contact/ownership identity comes from the signed-in account, not a submitted email or user ID.
+Source code and environment files are not uploaded. Submitted listing details and media are intended for public display. Product submissions enter review; agents and hackathon builds follow the website's current publishing policy. The server's returned status is authoritative.
 
-Metadata suggestions come only from `package.json`, README, git origin and known logo paths. Source code and environment files are not uploaded. Review suggestions and remove confidential information before submitting. Detected media URLs are suggestions, not proof that the assets exist.
+### Media
 
-The wizard saves `.arcapush-submission.json` locally between steps. Resume it on your next run. Add that file to your project's `.gitignore` if the draft is private. The completed listing link is saved in `arcapush.json`, bound to the API origin.
+Supported local files: PNG, JPEG and WebP images up to **8 MiB**, plus MP4 and WebM videos up to **50 MiB**. Public media URLs and YouTube links are also supported. The combined limit is eight media items, with at most one logo, one cover, six screenshots and two videos.
 
-Current website policy queues products for review and publishes agents and hackathon builds immediately. The server remains authoritative; the CLI displays its returned status.
+Use relative paths inside your project, such as `public/logo.png`. Local uploads begin only after approval. Use a public HTTPS domain or subdomain as a product's main website; supporting repository links may contain paths. Agents need a live URL or repository.
 
-### Media and URLs
+## Useful commands
 
-Use a public HTTPS domain or subdomain homepage as the primary destination. Repository and other secondary URLs may contain paths. Agents need a live URL or repository. All URL checks run on the server too.
+| Command | What it does |
+| --- | --- |
+| `arcapush` | Open the guided menu |
+| `arcapush login` | Connect your account |
+| `arcapush submit` | Submit a product, agent or hackathon build |
+| `arcapush status` | Check the listing linked to this directory |
+| `arcapush open` | Open the linked listing, or your dashboard if none is linked |
+| `arcapush update --input update.json --yes` | Apply reviewed changes to a linked product |
+| `arcapush schema --json` | Read current submission fields and categories |
+| `arcapush mcp-config` | Print an MCP configuration |
+| `arcapush logout` | Revoke the session and remove local credentials |
+| `arcapush --help` | Show commands and options |
+| `arcapush --version` | Show the installed version |
 
-This release supports **public media links and local files**, including YouTube video links. Up to eight media items, one logo, one cover, six screenshots and two videos, subject to the combined eight-item limit. Local media files are supported alongside URLs. The server verifies that uploaded paths belong to the signed-in account and submission context.
+The CLI saves a listing link in `arcapush.json`. Run status/update commands from that directory. CLI updates currently support products; edit agents and hackathon builds in the dashboard.
 
-## JSON and automation
+## Use with an AI assistant
 
-Use `arcapush schema --json` for the current exact fields. Copy a file from `examples/`, replace the example values, then validate:
+Arcapush includes a **local stdio MCP server**. It lets a compatible assistant read submission requirements, prepare a listing for review, submit it after approval, and check its status.
 
-```sh
-arcapush submit --input submission.json --dry-run --json
-arcapush submit --input submission.json --yes --json
-arcapush status --json
-```
-
-`--dry-run` validates ordinary fields on the server and inspects local file types, sizes and hashes without uploading, creating a listing or creating a server draft. Uploaded-object validation happens after transfer. It is not a reservation or a guarantee that duplicate checks will pass at submission time.
-
-`--yes` is explicit permission to send the reviewed file. JSON mode does not infer a problem statement or silently submit detected metadata. Noninteractive commands never wait for prompts.
-
-Before submission, the input file is updated with an API-bound `contextId`. Keep the same file and context ID when retrying after a timeout. The server returns the original result for a completed context. Changing the payload of that context is rejected. For a genuinely new submission, remove `contextId` from the new file. Do not retry a timed-out submission with a new context ID until its outcome is known.
-
-## MCP: submit through an AI agent
-
-This is a **local stdio MCP server** packaged with the CLI. It is not a public remote MCP URL. Install the CLI, run `arcapush login`, then add this entry to your MCP host's configuration:
+Install the CLI and run `arcapush login` first. Add this to your MCP host's configuration:
 
 ```json
 {
@@ -119,174 +119,56 @@ This is a **local stdio MCP server** packaged with the CLI. It is not a public r
 }
 ```
 
-Without a global install, let the host run the pinned package through npx:
+Alternatively, use the pinned package without a global install:
 
 ```json
 {
   "mcpServers": {
     "arcapush": {
       "command": "npx",
-      "args": ["-y", "@blindspotlab/arcapush@0.2.1", "mcp"]
+      "args": ["-y", "@blindspotlab/arcapush@0.2.2", "mcp"]
     }
   }
 }
 ```
 
-`arcapush mcp-config` prints the global-install configuration. Host-specific settings filenames vary. Restart the host after configuration changes.
+Host configuration locations vary. Restart your host after updating its configuration. On Windows, if the host cannot resolve npm command shims, run `npm.cmd root -g` and use `node` with the absolute path to `@blindspotlab/arcapush/dist/cli.js`, followed by `mcp`.
 
-On Windows, if the host cannot resolve the npm command shim, use the installed script directly. Run `npm.cmd root -g`, append `@blindspotlab/arcapush/dist/cli.js`, then configure:
+Ask your assistant:
 
-```json
-{
-  "mcpServers": {
-    "arcapush": {
-      "command": "node",
-      "args": ["C:/YOUR/NPM/ROOT/@blindspotlab/arcapush/dist/cli.js", "mcp"]
-    }
-  }
-}
-```
+> Prepare my product for Arcapush. Ask me for missing information, show me the complete listing and wait for my approval before submitting.
 
-Replace the example path with your actual global npm root. For local development, use an absolute path to this repository's `dist/cli.js` instead.
+Configure the host to require approval for `arcapush_submit`. Local media access is off by default; opt in with `"args": ["mcp", "--project-dir", "/absolute/path/to/project"]`. The assistant cannot expand this allowed directory through a tool call. Never paste account tokens into chat.
 
-Tools:
+See the [agent guide](docs/agent-guide.md) for tool names, approval rules, file limits and recovery after an interrupted submission.
 
-| Tool | Purpose |
-| --- | --- |
-| `arcapush_submission_schema` | Read current requirements and categories. |
-| `arcapush_prepare_submission` | Validate exact fields and return a review, context ID and confirmation ID. No server draft/listing is created. |
-| `arcapush_submit` | Submit that prepared review after user approval. |
-| `arcapush_submission_status` | Recover the saved draft or receipt after interruption. |
-| `arcapush_listing_status` | Read an owned listing's status and permitted metrics. |
+## JSON submissions and automation
 
-Example request to your agent:
-
-> Prepare my product for Arcapush using the public information I provide. Ask me for missing facts. Show me the full submission and wait for my approval before submitting it.
-
-Configure your host to **require approval for `arcapush_submit`**. The `confirmed: true` argument expresses approval but does not independently prove that a human approved; the host must enforce its approval policy. Preparation is limited to 20 pending reviews per process, and a review expires after 30 minutes. Changing credentials invalidates a prepared review. After a server restart, prepare the original payload again with its original `contextId` to recover safely.
-
-The MCP server does not scan your working directory. Local media access requires an operator-configured project directory; the agent supplies explicit relative media paths for review. Never paste an Arcapush token into a chat or commit one in MCP configuration.
-
-## Status, updates and logout
+Start from a [product](examples/product.json), [agent](examples/agent.json) or [hackathon](examples/hackathon.json) example. Replace its sample fields and check the current schema:
 
 ```sh
-arcapush status
-arcapush open
-arcapush update --input update.json --yes --json
-arcapush logout
+arcapush schema --json
+arcapush submit --input submission.json --dry-run --json
+arcapush submit --input submission.json --yes --json
+arcapush status --json
 ```
 
-Status works for all three listing types. Updates retain the existing **product-only** capability; edit agents and hackathon builds in the dashboard. A product update file contains only intended fields, for example:
+`--dry-run` validates fields and inspects local files without uploading or creating a listing. `--yes` authorizes sending the reviewed file. JSON mode never invents missing fields or waits for prompts.
 
-```json
-{ "tagline": "A clearer description of what this product does" }
-```
+Keep the same submission file and `contextId` when retrying a timeout so the server can recover the original result instead of creating a duplicate. Do not create a new context until the previous attempt's outcome is known.
 
-Logout revokes the token and removes local credentials. If the network fails, revoke it at `/dashboard/cli`. If using an environment token, also unset `ARCAPUSH_TOKEN`.
+## Troubleshooting
 
-## Production API
+- **Expired/revoked session or missing permissions:** run `arcapush login` again.
+- **Age declaration required:** open your [dashboard](https://arcapush.com/dashboard) and complete it yourself.
+- **Account paused or ineligible:** use the dashboard's support/review options; changing credentials will not resolve eligibility.
+- **Wrong environment:** `ARCAPUSH_API_URL` defaults to `https://arcapush.com`. Remove an old staging override in both the terminal and MCP host. Tokens are isolated by origin.
+- **Logout could not reach the server:** revoke the session from the dashboard. Also unset `ARCAPUSH_TOKEN` if you supplied one through your environment.
 
-The CLI talks only to the configured origin (default `https://arcapush.com`). It uses these endpoints:
+Report reproducible problems in [GitHub Issues](https://github.com/mojeebdev/arcapush-cli/issues). Include the CLI version and error message, without tokens or personal data.
 
-| Endpoint | Used by | Auth |
-| --- | --- | --- |
-| `POST /api/v1/cli/auth/start` | `login` — creates a device code | none |
-| `/cli/authorize` (browser) | You approve the device after web sign-in | web session |
-| `POST /api/v1/cli/auth/token` | `login` — polls for approval | device code |
-| `POST /api/v1/cli/auth/revoke` | `logout` | token |
-| `GET /api/v1/cli/submissions` | `schema`, wizard, MCP schema tool | none |
-| `POST /api/v1/cli/submissions` (`action: validate` / `submit`) | `submit`, MCP prepare/submit | token |
-| `GET /api/v1/cli/submissions?contextId=` | MCP submission recovery | token |
-| `POST /api/v1/cli/media` | local media uploads | token |
-| `GET /api/v1/cli/listings/{type}/{id}` | `status`, `open`, MCP listing status | token |
-| `PATCH /api/v1/cli/products/{id}` | `update` (products only) | token |
+## Contributing and licence
 
-Error responses are JSON `{ error, code? }`. The CLI shows the server's message; only a response without one falls back to a generic message. Codes you may see: `token_invalid`, `scope_missing`, `declaration_required`, `account_paused`, `not_eligible`.
+For repository setup, API contracts, staging and publishing, read the [maintainer guide](docs/maintaining.md). See [CHANGELOG.md](CHANGELOG.md) for release history.
 
-### Environment variables
-
-| Name | Purpose |
-| --- | --- |
-| `ARCAPUSH_API_URL` | API origin (HTTPS; HTTP only for loopback). Default `https://arcapush.com`. |
-| `ARCAPUSH_TOKEN` | Use this token instead of the saved one (for CI). Never commit it. |
-| `ARCAPUSH_PROJECT_DIR` | Directory the MCP server may read local media from (same as `--project-dir`). |
-| `NO_COLOR` | Disable colour output. |
-
-## Staging and credentials
-
-macOS/Linux:
-
-```sh
-export ARCAPUSH_API_URL=https://arcapush-staging.mojeebdev.workers.dev
-arcapush login
-```
-
-PowerShell:
-
-```powershell
-$env:ARCAPUSH_API_URL = 'https://arcapush-staging.mojeebdev.workers.dev'
-node .\dist\cli.js login
-```
-
-Ensure the staging server's site URL and authentication callback configuration point to staging. Set the same `ARCAPUSH_API_URL` in the MCP host's environment when testing staging.
-
-Saved tokens are isolated by API origin. Legacy production tokens migrate on the next login. Explicit `ARCAPUSH_TOKEN` overrides local credentials for the configured origin; use a token minted for that origin. Tokens are stored under the OS config directory, with owner-only POSIX file permissions where supported. They are not encrypted in an OS keychain. HTTP is permitted only for loopback development origins. Requests have a timeout and refuse redirects.
-
-## Maintainer: test, pack and release
-
-Before promoting a release, complete a real `arcapush login` against production and one authorized submission (a product enters review, so it is the safest live check). Automated tests use a mock HTTP API and a real local MCP transport; they do not prove live database or OAuth configuration.
-
-```powershell
-npm.cmd ci
-npm.cmd test
-npm.cmd pack --dry-run
-```
-
-The package's `prepack` hook builds `dist`. Published npm versions are immutable. For a new release, run `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and the lockfile), set the same `CLI_VERSION` in `src/lib.ts`, and add a `## X.Y.Z` section to CHANGELOG.md.
-
-The Publish workflow runs on a tag that names the exact version (`vX.Y.Z`) or a manual run on `main`. `scripts/release-preflight.mjs` checks the tag, the shown CLI version, the lockfile and the CHANGELOG section, and refuses to overwrite a published version (an identical re-run is skipped). It publishes with npm Trusted Publishing and provenance under the `next` tag, and creates a GitHub prerelease whose notes are that version's CHANGELOG section. Promote to `latest` separately, with a maintainer account, only after the production companion API is deployed and live sign-in, upload and submission checks pass:
-
-```sh
-npm dist-tag add @blindspotlab/arcapush@X.Y.Z latest
-```
-
-Do not publish the same version locally and through CI.
-
-For PowerShell execution-policy errors, use `npm.cmd`/`npx.cmd` or `node dist/cli.js`; do not weaken your system execution policy.
-
-
-## Local media
-
-```json
-{
-  "media": [
-    { "mediaType": "LOGO", "localPath": "public/logo.png", "altText": "Product logo" },
-    { "mediaType": "SCREENSHOT", "sourceType": "EXTERNAL_URL", "url": "https://example.com/screen.png", "altText": "Main screen" }
-  ]
-}
-```
-
-Put this media array inside your submission `payload`. CLI paths are relative to the current working directory, or `--project-dir DIR`. MCP file access is off by default. Opt in explicitly:
-
-```json
-{
-  "mcpServers": {
-    "arcapush": {
-      "command": "arcapush",
-      "args": ["mcp", "--project-dir", "/absolute/path/to/project"]
-    }
-  }
-}
-```
-
-Windows paths can use forward slashes, such as `C:/Users/you/project`. The agent cannot change the permitted root through a tool call. Files outside it, escaping symlinks, parent traversal, hidden files, SVG and non-media files are rejected. JPEG/PNG/WebP images have an 8 MiB limit; MP4/WebM videos have a 50 MiB limit. Content signatures are checked instead of trusting extensions.
-
-Review includes file names, sizes and SHA-256 hashes. Files changed after approval must be reviewed again. Uploads start only after submission approval, go directly to signed private storage URLs without forwarding the account bearer token, and become public during finalization. The CLI saves upload receipts into the submission file for retries.
-
-After a disrupted MCP session, call `arcapush_submission_status` with the original context ID to recover the saved payload or receipt before retrying. Do not create another context to recover a submission with an unknown outcome.
-
-## Licence
-
-Copyright 2026 **BlindspotLab Limited**. Apache License 2.0; see LICENSE and NOTICE. Earlier MIT permissions remain in LICENSE-MIT-LEGACY. Dependencies retain their own licences.
-
-For AI tools and integrators, read [the agent guide](docs/agent-guide.md). For changes, read [the changelog](CHANGELOG.md).
+Copyright 2026 **BlindspotLab Limited**. Licensed under [Apache License 2.0](LICENSE); see [NOTICE](NOTICE). Earlier MIT permissions remain in [LICENSE-MIT-LEGACY](LICENSE-MIT-LEGACY). Dependencies retain their own licences.
