@@ -1,0 +1,12 @@
+{
+  "type": "agent",
+  "payload": {
+    "name": "Your Agent",
+    "tagline": "Explain what your AI agent helps people do",
+    "category": "Coding Agent",
+    "whyNeeded": "Replace this with the specific problem the agent solves and who should use it.",
+    "agentUrl": "https://example.com",
+    "founderX": "your_handle",
+    "media": []
+  }
+}

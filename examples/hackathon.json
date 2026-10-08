@@ -1,0 +1,12 @@
+{
+  "type": "hackathon",
+  "payload": {
+    "name": "Your Hackathon Build",
+    "tagline": "Explain what you built and what makes it useful",
+    "category": "Developer Tools",
+    "ideaBehind": "Replace this with the idea behind the build and the constraint you built under.",
+    "productUrl": "https://example.com",
+    "founderX": "your_handle",
+    "media": []
+  }
+}
