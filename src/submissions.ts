@@ -18,16 +18,31 @@ export class ApiError extends Error {
   constructor(message: string, public status: number, public details: Payload = {}) { super(message); }
 }
 
+/**
+ * The message shown for a failed API call. The server's own JSON error wins —
+ * it is specific ("Submission draft not found.", an eligibility instruction).
+ * Only a response without one falls back to a generic explanation, so a
+ * missing draft is never misreported as an outdated server.
+ */
+export function apiErrorMessage(status: number, data: Payload, authenticated: boolean): string {
+  const raw = typeof data.error === "string" ? data.error.trim() : "";
+  const server = raw && !raw.startsWith("API returned HTTP") ? raw : "";
+  if (status === 401 && authenticated && (data.code === "token_invalid" || !server || server === "Unauthorized")) {
+    return "Your Arcapush CLI session has expired or was revoked. Run arcapush login.";
+  }
+  if (data.code === "declaration_required") {
+    return `${server || "Confirm you're 18 or older in your browser first."} ${apiBase()}/dashboard`;
+  }
+  if (server) return server;
+  if (status === 404) return "This Arcapush server does not offer that CLI endpoint. Check ARCAPUSH_API_URL or update the CLI.";
+  return `API request failed (${status}).`;
+}
+
 export async function request(path: string, method = "GET", body?: unknown, authenticated = true): Promise<Payload> {
   const token = authenticated ? readStoredToken() : null;
   if (authenticated && !token) throw new ApiError("Not logged in. Run arcapush login in your terminal first.", 401);
   const result = await api(path, { method, token, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-  if (result.status >= 400) {
-    const message = result.status === 404 && path.startsWith("/api/v1/cli/submissions")
-      ? "This server does not support CLI 0.2 submissions yet. Deploy the companion Arcapush API update first."
-      : String(result.data.error || `API request failed (${result.status}).`);
-    throw new ApiError(message, result.status, result.data);
-  }
+  if (result.status >= 400) throw new ApiError(apiErrorMessage(result.status, result.data, authenticated), result.status, result.data);
   if (typeof result.data !== "object" || !result.data || Array.isArray(result.data)) throw new Error("Invalid API response.");
   return result.data;
 }
