@@ -43,12 +43,16 @@ jobs:
           RELEASE_VERSION: ${{ steps.release.outputs.version }}
         shell: bash
         run: |
-          for attempt in 1 2 3 4 5 6; do
-            LATEST=$(npm view @blindspotlab/arcapush dist-tags.latest)
-            if [ "$LATEST" = "$RELEASE_VERSION" ]; then exit 0; fi
-            sleep 5
+          # npm can accept a publish before its metadata becomes public.
+          LATEST=unavailable
+          for attempt in $(seq 1 30); do
+            if LATEST=$(npm view @blindspotlab/arcapush dist-tags.latest --prefer-online --fetch-retries=0 --fetch-timeout=10000); then
+              if [ "$LATEST" = "$RELEASE_VERSION" ]; then exit 0; fi
+            fi
+            echo "Waiting for npm processing ($attempt/30): latest=$LATEST"
+            sleep 10
           done
-          echo "npm latest is $LATEST, expected $RELEASE_VERSION. Repair the tag before rerunning."
+          echo "npm latest is $LATEST, expected $RELEASE_VERSION. Check processing and tags, then rerun this workflow."
           exit 1
       - name: Create release with human and agent-readable notes
         env:
