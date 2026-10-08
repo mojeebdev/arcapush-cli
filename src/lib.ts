@@ -1,4 +1,7 @@
+// Copyright 2026 BlindspotLab Limited
+// SPDX-License-Identifier: Apache-2.0
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -6,12 +9,18 @@ import { createInterface } from "node:readline/promises";
 import { stdin as input, stdout as output } from "node:process";
 
 export const DEFAULT_API = "https://arcapush.com";
-export const CLI_VERSION = "0.1.2";
+export const CLI_VERSION = "0.2.0";
 
 export type JsonMode = boolean;
 
 export function apiBase(): string {
-  return (process.env.ARCAPUSH_API_URL || DEFAULT_API).replace(/\/$/, "");
+  const url = new URL(process.env.ARCAPUSH_API_URL || DEFAULT_API);
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
+  if (url.username || url.password || url.search || url.hash || url.pathname !== "/" ||
+      (url.protocol !== "https:" && !(local && url.protocol === "http:"))) {
+    throw new Error("ARCAPUSH_API_URL must be an HTTPS origin (HTTP is allowed on localhost only).");
+  }
+  return url.origin;
 }
 
 export function configDir(): string {
@@ -22,14 +31,18 @@ export function configDir(): string {
 }
 
 function tokenPath(): string {
-  return join(configDir(), "token");
+  // Bind credentials to their API origin. Never send a production token to staging.
+  const suffix = createHash("sha256").update(apiBase()).digest("hex").slice(0, 16);
+  return join(configDir(), `token-${suffix}`);
 }
 
 export function readStoredToken(): string | null {
   const env = process.env.ARCAPUSH_TOKEN?.trim();
   if (env) return env;
   try {
-    const raw = readFileSync(tokenPath(), "utf8").trim();
+    const file = existsSync(tokenPath()) ? tokenPath()
+      : apiBase() === DEFAULT_API ? join(configDir(), "token") : tokenPath();
+    const raw = readFileSync(file, "utf8").trim();
     return raw || null;
   } catch {
     return null;
@@ -38,9 +51,9 @@ export function readStoredToken(): string | null {
 
 export function writeStoredToken(token: string): void {
   const dir = configDir();
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
   const file = tokenPath();
-  writeFileSync(file, `${token}\n`, { encoding: "utf8" });
+  writeFileSync(file, `${token}\n`, { encoding: "utf8", mode: 0o600 });
   try {
     chmodSync(file, 0o600);
   } catch {
@@ -54,6 +67,7 @@ export function clearStoredToken(): void {
   } catch {
     // already gone
   }
+  if (apiBase() === DEFAULT_API) rmSync(join(configDir(), "token"), { force: true });
 }
 
 export function fail(message: string, json: JsonMode, extra: Record<string, unknown> = {}): never {
@@ -87,8 +101,10 @@ export async function api(
     method: init.method ?? "GET",
     headers,
     body: init.body,
+    redirect: "error",
+    signal: init.signal ?? AbortSignal.timeout(30_000),
   });
-  const data = (await response.json().catch(() => ({}))) as Record<string, unknown>;
+  const data = (await response.json().catch(() => ({ error: `API returned HTTP ${response.status} without JSON.` }))) as Record<string, unknown>;
   return { status: response.status, data };
 }
 
@@ -109,8 +125,14 @@ export function openUrl(url: string): void {
     throw new Error("Refused to open a non-http URL.");
   }
   const command = process.platform === "darwin" ? "open" : process.platform === "win32" ? "cmd" : "xdg-open";
+  // Browser-opening URLs are restricted to this API origin and conservative characters.
+  if (parsed.origin !== apiBase() || /[\s"<>^&|%]/.test(parsed.toString())) {
+    throw new Error("Open this URL manually in your browser.");
+  }
   const args = process.platform === "win32" ? ["/c", "start", "", parsed.toString()] : [parsed.toString()];
-  spawn(command, args, { detached: true, stdio: "ignore" }).unref();
+  const child = spawn(command, args, { detached: true, stdio: "ignore" });
+  child.on("error", () => {});
+  child.unref();
 }
 
 export async function ask(question: string, fallback = ""): Promise<string> {
@@ -201,6 +223,18 @@ function publicAssetUrl(homepage: string, assetPath: string): string {
   }
 }
 
+function publicMetadataUrl(value: string): string {
+  try {
+    const url = new URL(value.replace(/^git\+/, ""));
+    if (!["https:", "http:"].includes(url.protocol)) return "";
+    url.username = "";
+    url.password = "";
+    url.search = "";
+    url.hash = "";
+    return url.toString().replace(/\.git$/, "");
+  } catch { return ""; }
+}
+
 export interface DetectedProject {
   name: string;
   tagline: string;
@@ -222,7 +256,7 @@ export function detectProject(dir = cwd()): DetectedProject {
   const remote = gitRemote(dir);
   if (remote) found.push("git remote");
 
-  const homepage = typeof pkg?.homepage === "string" ? pkg.homepage : "";
+  const homepage = typeof pkg?.homepage === "string" ? publicMetadataUrl(pkg.homepage) : "";
   const repoField = pkg?.repository;
   const repoFromPkg =
     typeof repoField === "string"
@@ -239,7 +273,7 @@ export function detectProject(dir = cwd()): DetectedProject {
     name: String(pkg?.name ?? heading(readme ?? "") ?? "").replace(/^@[^/]+\//, ""),
     tagline: String(pkg?.description ?? firstParagraph(readme ?? "") ?? ""),
     website: homepage,
-    repositoryUrl: remote || repoFromPkg,
+    repositoryUrl: publicMetadataUrl(remote || repoFromPkg),
     logoPath,
     logoUrl,
     category: "Developer Tools",
@@ -251,6 +285,7 @@ export interface LinkedProduct {
   productId: string;
   slug: string;
   type: string;
+  apiUrl?: string;
 }
 
 export function arcapushJsonPath(dir = cwd()): string {
@@ -260,10 +295,12 @@ export function arcapushJsonPath(dir = cwd()): string {
 export function readLinkedProduct(dir = cwd()): LinkedProduct | null {
   const data = readJson(arcapushJsonPath(dir));
   if (!data || typeof data.productId !== "string") return null;
+  if ((data.apiUrl ?? DEFAULT_API) !== apiBase()) throw new Error("This arcapush.json belongs to a different API origin.");
   return {
     productId: data.productId,
     slug: typeof data.slug === "string" ? data.slug : "",
     type: typeof data.type === "string" ? data.type : "product",
+    apiUrl: String(data.apiUrl ?? DEFAULT_API),
   };
 }
 
@@ -271,10 +308,10 @@ export function writeLinkedProduct(product: LinkedProduct, dir = cwd()): void {
   writeFileSync(
     arcapushJsonPath(dir),
     `${JSON.stringify({
-      $schema: "https://arcapush.com/schema.json",
       productId: product.productId,
       slug: product.slug,
       type: product.type,
+      apiUrl: apiBase(),
     }, null, 2)}\n`,
   );
 }

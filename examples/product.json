@@ -1,0 +1,12 @@
+{
+  "type": "product",
+  "payload": {
+    "name": "Your Product",
+    "tagline": "Explain what your product helps people do",
+    "category": "SaaS",
+    "problemStatement": "Replace this with the specific problem your product solves and who it helps.",
+    "website": "https://example.com",
+    "founderName": "Your Public Name",
+    "media": []
+  }
+}

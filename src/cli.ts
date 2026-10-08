@@ -1,346 +1,235 @@
 #!/usr/bin/env node
-import {
-  api,
-  apiBase,
-  ask,
-  clearStoredToken,
-  CLI_VERSION,
-  confirm,
-  detectProject,
-  fail,
-  ok,
-  openUrl,
-  parseArgs,
-  readLinkedProduct,
-  readStoredToken,
-  requireToken,
-  writeLinkedProduct,
-  writeStoredToken,
-} from "./lib.js";
+// Copyright 2026 BlindspotLab Limited
+// SPDX-License-Identifier: Apache-2.0
+import { existsSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { api, apiBase, ask, clearStoredToken, CLI_VERSION, confirm, detectProject, openUrl, readLinkedProduct, readStoredToken, writeLinkedProduct, writeStoredToken } from './lib.js';
+import { ApiError, getListing, getSchema, parseSubmission, readSubmission, request, saveSubmission, sendSubmission, validateSubmission, type ListingType, type Payload, type SubmissionInput } from './submissions.js';
+import { reviewLocalMedia, withoutLocalMedia, uploadLocalMedia } from './media.js';
+import { banner, terminalText } from './ui.js';
 
 const HELP = `Arcapush CLI ${CLI_VERSION}
-
-Ship alone. Get discovered.
+Good products deserve to be discovered.
 
 Usage:
-  arcapush                 Interactive menu
-  arcapush login
-  arcapush logout
-  arcapush submit
-  arcapush update
-  arcapush status
-  arcapush open
-  arcapush --help
-  arcapush --version
+  arcapush                       Guided onboarding / menu
+  arcapush login [--no-browser]   Authorize this device in your browser
+  arcapush logout                Revoke this device's token
+  arcapush submit [--type product|agent|hackathon]
+  arcapush submit --input submission.json --dry-run --json
+  arcapush submit --input submission.json --yes --json
+  arcapush schema [--json]        Current server fields and submission steps
+  arcapush status [--json]        Status of the linked listing
+  arcapush update --input update.json --yes [--json]
+  arcapush open                   Open the linked listing
+  arcapush mcp [--project-dir DIR] Start MCP; opt into local media within DIR
+  arcapush mcp-config             Print MCP host configuration
 
-JSON:
-  arcapush submit --json
-  arcapush status --json
-
-The CLI reads package.json, README, git remote, and public logo paths.
-It never uploads source code, .env files, or secrets.
+Options: --json --input FILE --type TYPE --project-dir DIR --dry-run --yes --ascii --no-browser
+Node.js 22+. Sign in once before using an AI agent.
+Metadata detection reads package.json, README, git remote and logo paths locally.
+Review fields before submission. Source files are not uploaded.
 `;
 
-async function login(json: boolean): Promise<void> {
-  const started = await api("/api/v1/cli/auth/start", { method: "POST" });
-  if (started.status !== 200) {
-    fail(String(started.data.error || "Could not start login."), json);
+type Flags = Record<string, string | boolean>;
+export function args(argv: string[]): { command: string; flags: Flags } {
+  let command = ''; const flags: Flags = {};
+  const values = new Set(['input', 'type', 'project-dir']);
+  const booleans = new Set(['json', 'yes', 'dry-run', 'ascii', 'no-browser', 'help', 'version']);
+  for (let i = 0; i < argv.length; i++) {
+    const part = argv[i];
+    if (part === '-h') { flags.help = true; continue; }
+    if (part === '-v') { flags.version = true; continue; }
+    if (!part.startsWith('-')) { if (command) throw new Error(`Unexpected argument: ${part}`); command = part; continue; }
+    const equal = part.indexOf('=');
+    const key = part.slice(2, equal < 0 ? undefined : equal);
+    if (values.has(key)) {
+      const value = equal < 0 ? argv[++i] : part.slice(equal + 1);
+      if (!value || value.startsWith('--')) throw new Error(`--${key} requires a value.`);
+      flags[key] = value;
+    } else if (booleans.has(key) && equal < 0) flags[key] = true;
+    else throw new Error(`Unknown option: ${part}`);
   }
-  const deviceCode = String(started.data.deviceCode ?? "");
-  const userCode = String(started.data.userCode ?? "");
-  const verificationUrl = String(started.data.verificationUrl ?? `${apiBase()}/cli/authorize`);
-  const interval = Number(started.data.interval ?? 3) * 1000;
+  return { command, flags };
+}
 
-  if (!json) {
-    process.stdout.write(`\nOpening Arcapush...\n\nVerification code:\n${userCode}\n\nConfirm this device in your browser.\n`);
-  }
-  try {
-    openUrl(verificationUrl);
-  } catch {
-    if (!json) process.stdout.write(`Open this URL:\n${verificationUrl}\n`);
-  }
-
-  const deadline = Date.now() + 15 * 60 * 1000;
+function print(data: unknown, json: boolean, lines: string[] = []): void {
+  process.stdout.write(json ? `${JSON.stringify(data)}\n` : `${lines.map(terminalText).join('\n')}\n`);
+}
+function interactive(): void {
+  if (!process.stdin.isTTY || !process.stdout.isTTY) throw new Error('Interactive input needs a terminal. Use --input FILE --yes --json, or arcapush mcp.');
+}
+async function login(flags: Flags): Promise<void> {
+  if (flags.json) throw new Error('Login is interactive. Run arcapush login --no-browser and authorize this device.');
+  interactive();
+  const started = await request('/api/v1/cli/auth/start', 'POST', {}, false);
+  const deviceCode = String(started.deviceCode || '');
+  if (!deviceCode) throw new Error('Server did not return a device code.');
+  const url = String(started.verificationUrl || '');
+  if (new URL(url).origin !== apiBase()) throw new Error('Authorization URL does not match the configured API origin. Check SITE_URL on the server.');
+  print(null, false, ['Authorize this device in your browser:', url, `Verification code: ${started.userCode}`, 'Waiting for your approval...']);
+  if (!flags['no-browser']) { try { openUrl(url); } catch { /* URL already printed. */ } }
+  const interval = Math.max(1, Math.min(Number(started.interval) || 3, 30)) * 1000;
+  const expires = Math.max(1, Math.min(Number(started.expiresIn) || 900, 900)) * 1000;
+  const deadline = Date.now() + expires;
   while (Date.now() < deadline) {
-    await sleep(interval);
-    const exchanged = await api("/api/v1/cli/auth/token", {
-      method: "POST",
-      body: JSON.stringify({ deviceCode }),
-    });
-    if (exchanged.data.status === "pending") continue;
-    if (exchanged.status !== 200 || exchanged.data.status !== "approved") {
-      fail(String(exchanged.data.error || "Login failed."), json);
-    }
-    const token = String(exchanged.data.token ?? "");
-    writeStoredToken(token);
-    const user = (exchanged.data.user ?? {}) as { name?: string; email?: string };
-    ok(
-      { user },
-      json,
-      [`\nLogged in as ${user.name || user.email || "founder"}.`],
-    );
+    await new Promise(resolve => setTimeout(resolve, interval));
+    const result = await api('/api/v1/cli/auth/token', { method: 'POST', body: JSON.stringify({ deviceCode }) });
+    if (result.status === 200 && result.data.status === 'pending') continue;
+    if (result.status !== 200 || result.data.status !== 'approved' || typeof result.data.token !== 'string' || !result.data.token.startsWith('apc_')) throw new Error(String(result.data.error || 'Authorization expired or was rejected.'));
+    writeStoredToken(result.data.token);
+    print(null, false, ['Connected. Run arcapush submit, or connect your agent with arcapush mcp-config.']);
     return;
   }
-  fail("Login timed out.", json);
+  throw new Error('Authorization timed out. Run arcapush login again.');
 }
 
-async function logout(json: boolean): Promise<void> {
-  const token = readStoredToken();
-  if (token) {
-    await api("/api/v1/cli/auth/revoke", { method: "POST", token }).catch(() => {});
+async function wizard(typeFlag?: string): Promise<SubmissionInput> {
+  interactive();
+  const schema = await getSchema();
+  const draftFile = '.arcapush-submission.json';
+  const resumed = !typeFlag && existsSync(draftFile) && await confirm('Resume the saved submission?', true) ? readSubmission(draftFile) : null;
+  const previousPayload = resumed ? JSON.stringify(resumed.payload) : null;
+  const previousContext = resumed?.contextId;
+  let type = (resumed?.type || typeFlag) as ListingType | undefined;
+  if (!type) {
+    print(null, false, ['What are you shipping?', '  1) Product', '  2) AI agent', '  3) Hackathon build']);
+    const choice = await ask('Choose', '1');
+    type = ({ '1': 'product', '2': 'agent', '3': 'hackathon' } as Record<string, ListingType>)[choice];
   }
-  clearStoredToken();
-  ok({}, json, ["Logged out. Local token removed."]);
-}
-
-async function submit(json: boolean, force = false): Promise<void> {
-  const token = await requireToken(json);
+  if (!type || !schema.types[type]) throw new Error('Choose product, agent, or hackathon.');
   const detected = detectProject();
-  if (!json) {
-    process.stdout.write("\nArcapush reads project metadata only. Source code is never uploaded.\n\n");
-    for (const item of detected.found) process.stdout.write(`  found ${item}\n`);
-    process.stdout.write("\n");
-  }
-
-  let type = "product";
-  if (!json) {
-    process.stdout.write("What are you shipping?\n  1) Product\n  2) AI Agent\n  3) Hackathon Project\n");
-    const choice = await ask("Choose", "1");
-    type = choice === "2" ? "agent" : choice === "3" ? "hackathon" : "product";
-  }
-
-  const name = json ? detected.name : await ask("Product", detected.name);
-  const tagline = json ? detected.tagline : await ask("Tagline", detected.tagline);
-  const website = json ? detected.website : await ask("Website", detected.website);
-  const repositoryUrl = json ? detected.repositoryUrl : await ask("GitHub", detected.repositoryUrl);
-  const category = json ? detected.category : await ask("Category", detected.category);
-  const problemStatement = json
-    ? (detected.tagline || `${name} is a ${category} product.`)
-    : await ask("What problem does it solve?", detected.tagline);
-  const logoUrl = json ? detected.logoUrl : await ask("Logo / product image URL", detected.logoUrl);
-
-  if (!json) {
-    process.stdout.write(`\nProduct: ${name}\nTagline: ${tagline}\nWebsite: ${website}\nGitHub: ${repositoryUrl}\nLogo: ${logoUrl || detected.logoPath || "none"}\nCategory: ${category}\n\n`);
-    if (!(await confirm("Continue?"))) fail("Cancelled.", false);
-  }
-
-  if (!name || !tagline || !website) {
-    fail("name, tagline, and website are required.", json);
-  }
-
-  const payload = {
-    type,
-    name,
-    tagline,
-    problemStatement: problemStatement || tagline,
-    category,
-    website,
-    repositoryUrl: repositoryUrl || undefined,
-    logoUrl: logoUrl || undefined,
-    force,
-  };
-
-  const result = await api("/api/v1/cli/products", {
-    method: "POST",
-    token,
-    body: JSON.stringify(payload),
-  });
-
-  if (result.status === 409 && result.data.error === "possible_duplicate") {
-    const matches = Array.isArray(result.data.matches) ? result.data.matches : [];
-    if (json) fail("possible_duplicate", true, { matches });
-    process.stdout.write("\nThis product may already exist on Arcapush.\n");
-    for (const match of matches) {
-      const item = match as { name?: string; url?: string; claimed?: boolean };
-      process.stdout.write(`  ${item.name} ${item.claimed ? "(claimed)" : ""} ${item.url ?? ""}\n`);
+  const input = resumed || parseSubmission({ type, payload: {} });
+  const spec = schema.types[type];
+  const defaults: Payload = { name: detected.name, tagline: detected.tagline, website: detected.website, agentUrl: detected.website, productUrl: detected.website, repositoryUrl: detected.repositoryUrl, githubUrl: detected.repositoryUrl, ...input.payload };
+  print(null, false, ['Local metadata detected. Check all suggestions before submitting.', ...detected.found.map(x => `  ${x}`), 'Optional fields: Enter to skip. Type - to clear a suggested value.']);
+  for (const [index, step] of spec.steps.entries()) {
+    if (step.id === 'review') break;
+    print(null, false, [`\n${index + 1}/${spec.steps.length}  ${step.label}`, step.hint]);
+    if (step.id === 'basics') print(null, false, [`Categories: ${spec.categories.join(', ')}`]);
+    if (step.id === 'passport' && !await confirm('Add optional agent passport details?', false)) continue;
+    for (const field of spec.fields.filter(x => x.step === step.id)) {
+      let value: string;
+      do {
+        if (field.hint) print(null, false, [field.hint]);
+        value = await ask(terminalText(`${field.label}${field.required ? ' *' : ''}`), terminalText(defaults[field.key] || ''));
+        if (value === '-') value = '';
+        if (field.required && !value) print(null, false, ['This field is required.']);
+        else if (value && ((field.minLength && value.length < field.minLength) || (field.maxLength && value.length > field.maxLength))) print(null, false, [`Use ${field.minLength || 1}-${field.maxLength || 'unlimited'} characters.`]);
+        else if (field.key === 'category' && !spec.categories.includes(value)) print(null, false, ['Choose a category exactly as listed.']);
+        else break;
+      } while (true);
+      if (value) input.payload[field.key] = value;
+      else delete input.payload[field.key];
     }
-    process.stdout.write("\n  1) View listing\n  2) Submit anyway for admin review\n  3) Cancel\n");
-    const choice = await ask("Choose", "3");
-    if (choice === "1") {
-      const first = matches[0] as { url?: string } | undefined;
-      if (first?.url) openUrl(String(first.url));
-      return;
+    if (step.id === 'media' && !(Array.isArray(input.payload.media) && input.payload.media.length && await confirm('Keep the saved media links?', true))) {
+      const media: Payload[] = [];
+      print(null, false, ['Use a public HTTPS URL or a relative local file path, e.g. public/logo.png.']);
+      for (const [kind, limit] of [['LOGO', 1], ['COVER', 1], ['SCREENSHOT', schema.media.maxScreenshots], ['VIDEO', schema.media.maxVideos]] as const) {
+        for (let n = 0; n < limit && media.length < schema.media.maxItems; n++) {
+          const url = await ask(`${kind.toLowerCase()} URL or file${n ? ` ${n + 1}` : ''} (optional)`, kind === 'LOGO' ? detected.logoUrl : '');
+          if (!url || url === '-') break;
+          const altText = await ask('Alt text / short description (optional)');
+          media.push(/^https:\/\//i.test(url) ? { mediaType: kind, sourceType: kind === 'VIDEO' && /(?:youtube\.com|youtu\.be)/.test(url) ? 'YOUTUBE' : 'EXTERNAL_URL', url, altText: altText || null, position: media.length } : { mediaType: kind, localPath: url, altText: altText || null, position: media.length });
+        }
+      }
+      input.payload.media = media;
     }
-    if (choice === "2") return submit(false, true);
-    fail("Cancelled.", false);
+    if (previousPayload !== null && JSON.stringify(input.payload) !== previousPayload && input.contextId === previousContext) input.contextId = randomUUID();
+    saveSubmission(draftFile, input);
   }
+  saveSubmission(draftFile, input);
+  return input;
+}
 
-  if (result.status >= 400) {
-    fail(String(result.data.error || "Submission failed."), json);
+async function submit(flags: Flags): Promise<void> {
+  const json = Boolean(flags.json);
+  if (!readStoredToken()) {
+    if (json || flags.input || !process.stdin.isTTY) throw new Error('Run arcapush login first.');
+    if (!await confirm('Connect your Arcapush account?', true)) return;
+    await login(flags);
   }
-
-  writeLinkedProduct({
-    productId: String(result.data.id ?? ""),
-    slug: String(result.data.slug ?? ""),
-    type,
-  });
-
-  ok(
-    {
-      id: result.data.id,
-      status: result.data.status,
-      url: result.data.url,
-      slug: result.data.slug,
-    },
-    json,
-    [
-      `\nSubmitted ${name}.`,
-      `Status: ${String(result.data.status ?? "pending_review")}`,
-      String(result.data.url ?? ""),
-      "Wrote arcapush.json",
-    ],
-  );
+  if (json && !flags.input) throw new Error('--json submit requires --input FILE. It never invents submission fields.');
+  const input = flags.input ? readSubmission(String(flags.input)) : await wizard(flags.type as string | undefined);
+  // Persist the UUID before any network write, making retries of this file stable.
+  if (flags.input && !flags['dry-run']) saveSubmission(String(flags.input), input);
+  const root = String(flags['project-dir'] || process.cwd());
+  const localFiles = reviewLocalMedia(input, root);
+  const validation = await validateSubmission(localFiles.length ? withoutLocalMedia(input) : input);
+  if (flags['dry-run']) { print({ success: true, ...validation, submission: input, localFiles, uploadsPending: localFiles.length > 0 }, json, ['Fields validated; local files inspected without uploading. No listing or server draft was created.', JSON.stringify(input, null, 2)]); return; }
+  if (!json) print(null, false, ['\nReview your submission', JSON.stringify(input, null, 2), ...(localFiles.length ? ['Local files will be uploaded after confirmation:', JSON.stringify(localFiles, null, 2)] : []), input.type === 'product' ? 'This product will be queued for review.' : 'The current website policy publishes agents and hackathon builds immediately.']);
+  if (!flags.yes) { interactive(); if (!await confirm('Submit this listing to Arcapush?', false)) { print(null, json, ['Cancelled. Your local draft is saved.']); return; } }
+  await uploadLocalMedia(input, root, localFiles, () => saveSubmission(String(flags.input || '.arcapush-submission.json'), input));
+  if (localFiles.length) await validateSubmission(input);
+  const result = await sendSubmission(input);
+  if (typeof result.id !== 'string' || typeof result.slug !== 'string') throw new Error('Submission response is incomplete. Keep the same contextId and check before retrying.');
+  writeLinkedProduct({ productId: result.id, slug: result.slug, type: input.type });
+  print({ success: true, ...result }, json, [String(result.message || 'Submitted.'), `Status: ${result.status}`, `${apiBase()}${result.href}`, `Dashboard: ${apiBase()}/dashboard`, 'Saved arcapush.json. Keep your submission contextId for safe retries.']);
 }
 
 async function status(json: boolean): Promise<void> {
-  const token = await requireToken(json);
   const linked = readLinkedProduct();
-  if (!linked) fail("No arcapush.json in this directory. Submit first.", json);
-
-  const result = await api(`/api/v1/cli/products/${linked.productId}`, { token });
-  if (result.status >= 400) fail(String(result.data.error || "Could not load status."), json);
-
-  const metrics = (result.data.metrics ?? {}) as Record<string, number>;
-  const editorial = (result.data.editorial ?? {}) as Record<string, boolean>;
-  const flags = [
-    editorial.featured ? "Featured" : "",
-    editorial.editorsPick ? "Editors pick" : "",
-    editorial.rising ? "Rising" : "",
-  ].filter(Boolean);
-
-  ok(
-    {
-      id: result.data.id,
-      status: result.data.status,
-      url: result.data.url,
-      metrics,
-      editorial,
-    },
-    json,
-    [
-      `Arcapush — ${String(result.data.name ?? linked.slug)}`,
-      "",
-      "Status",
-      `${result.data.status === "published" ? "Published" : String(result.data.status)}`,
-      "",
-      `Views                ${metrics.views ?? 0}`,
-      `Outbound visits      ${metrics.visits ?? 0}`,
-      `Shares               ${metrics.shares ?? 0}`,
-      "",
-      "Editorial",
-      flags.join(", ") || "None",
-      "",
-      String(result.data.url ?? ""),
-    ],
-  );
+  if (!linked) throw new Error('No arcapush.json in this directory. Submit first.');
+  const result = await getListing(linked.type, linked.productId);
+  print(result, json, [String(result.name || linked.slug), `Status: ${result.status}`, String(result.url || ''), JSON.stringify(result.metrics || {}, null, 2)]);
 }
 
-async function update(json: boolean): Promise<void> {
-  const token = await requireToken(json);
+async function update(flags: Flags): Promise<void> {
   const linked = readLinkedProduct();
-  if (!linked) fail("No arcapush.json in this directory. Submit first.", json);
-  const detected = detectProject();
-
-  const current = await api(`/api/v1/cli/products/${linked.productId}`, { token });
-  if (current.status >= 400) fail(String(current.data.error || "Could not load product."), json);
-
-  const next = {
-    tagline: detected.tagline,
-    website: detected.website,
-    repositoryUrl: detected.repositoryUrl,
-    category: detected.category,
-  };
-
-  if (!json) {
-    process.stdout.write("\nDetected updates from local metadata:\n");
-    process.stdout.write(`  tagline: ${next.tagline || "(unchanged unless you edit)"}\n`);
-    process.stdout.write(`  website: ${next.website}\n`);
-    process.stdout.write(`  repository: ${next.repositoryUrl}\n`);
-    process.stdout.write(`  category: ${next.category}\n\n`);
-    if (!(await confirm("Apply these updates?"))) fail("Cancelled.", false);
-    next.tagline = await ask("Tagline", next.tagline);
-    next.website = await ask("Website", next.website);
-    next.repositoryUrl = await ask("Repository", next.repositoryUrl);
-    next.category = await ask("Category", next.category);
-  }
-
-  const body: Record<string, string> = {};
-  if (next.tagline) body.tagline = next.tagline;
-  if (next.website) body.website = next.website;
-  if (next.repositoryUrl) body.repositoryUrl = next.repositoryUrl;
-  if (next.category) body.category = next.category;
-
-  const result = await api(`/api/v1/cli/products/${linked.productId}`, {
-    method: "PATCH",
-    token,
-    body: JSON.stringify(body),
-  });
-  if (result.status >= 400) fail(String(result.data.error || "Update failed."), json);
-  ok({ id: result.data.id, slug: result.data.slug }, json, ["Product updated."]);
+  if (!linked) throw new Error('No linked listing. Submit first.');
+  if (linked.type !== 'product') throw new Error(`Edit agents and hackathon builds at ${apiBase()}/dashboard. This release keeps CLI update limited to products.`);
+  if (!flags.input) throw new Error('Use --input update.json with only the product fields you intend to change.');
+  const { readFileSync } = await import('node:fs');
+  const body = JSON.parse(readFileSync(String(flags.input), 'utf8'));
+  if (!body || typeof body !== 'object' || Array.isArray(body) || !Object.keys(body).length) throw new Error('Update must be a nonempty JSON object.');
+  if (!flags.json) print(null, false, ['Review product changes:', JSON.stringify(body, null, 2)]);
+  if (!flags.yes) { interactive(); if (!await confirm('Apply these changes?', false)) return; }
+  const result = await request(`/api/v1/cli/products/${encodeURIComponent(linked.productId)}`, 'PATCH', body);
+  print(result, Boolean(flags.json), ['Product updated.']);
 }
 
-async function openListing(json: boolean): Promise<void> {
-  const linked = readLinkedProduct();
-  let url = `${apiBase()}/discovery`;
-  if (linked) {
-    const token = readStoredToken();
-    if (token) {
-      const result = await api(`/api/v1/cli/products/${linked.productId}`, { token });
-      if (typeof result.data.url === "string") url = result.data.url;
-    }
-  }
-  if (!json) process.stdout.write(`Opening ${url}\n`);
-  openUrl(url);
-  ok({ url }, json, []);
-}
-
-async function menu(): Promise<void> {
-  process.stdout.write("\nArcapush\n\nShip alone. Get discovered.\n\nWhat do you want to do?\n\n");
-  process.stdout.write("  1) Submit this product\n  2) Update an existing product\n  3) Check status\n  4) Open Arcapush\n  5) Login / Logout\n");
-  const choice = await ask("Choose", "1");
-  if (choice === "2") return update(false);
-  if (choice === "3") return status(false);
-  if (choice === "4") return openListing(false);
-  if (choice === "5") {
-    if (readStoredToken()) return logout(false);
-    await login(false);
-    return menu();
-  }
-  return submit(false);
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main(): Promise<void> {
-  const { command, flags } = parseArgs(process.argv);
+export async function main(argv = process.argv.slice(2)): Promise<void> {
+  const { command, flags } = args(argv);
   const json = Boolean(flags.json);
-  if (flags.help) {
-    process.stdout.write(HELP);
-    return;
+  if (flags.help) { process.stdout.write(HELP); return; }
+  if (flags.version) { process.stdout.write(`${CLI_VERSION}\n`); return; }
+  if (command === 'mcp') { const { startMcp } = await import('./mcp.js'); await startMcp(typeof flags['project-dir'] === 'string' ? flags['project-dir'] : process.env.ARCAPUSH_PROJECT_DIR); return; }
+  if (command === 'mcp-config') { print({ mcpServers: { arcapush: { command: 'arcapush', args: ['mcp'] } } }, true); return; }
+  if (command === 'schema') { const schema = await getSchema(); print(schema, json, [JSON.stringify(schema, null, 2)]); return; }
+  if (!json && process.stdout.isTTY && ['', 'submit', 'login'].includes(command)) banner(Boolean(flags.ascii));
+  if (command === 'login') return login(flags);
+  if (command === 'logout') {
+    const token = readStoredToken();
+    let revoked = !token;
+    if (token) { const result = await api('/api/v1/cli/auth/revoke', { method: 'POST', token }).catch(() => null); revoked = Boolean(result && result.status < 400); }
+    clearStoredToken();
+    print({ success: true, revoked, environmentToken: Boolean(process.env.ARCAPUSH_TOKEN) }, json, ['Local credentials removed.', revoked ? 'Server token revoked.' : `Server revocation failed. Revoke the session at ${apiBase()}/dashboard/cli.`, ...(process.env.ARCAPUSH_TOKEN ? ['Unset ARCAPUSH_TOKEN in your environment.'] : [])]); return;
   }
-  if (flags.version) {
-    process.stdout.write(`${CLI_VERSION}\n`);
-    return;
+  if (command === 'submit') return submit(flags);
+  if (command === 'status') return status(json);
+  if (command === 'update') return update(flags);
+  if (command === 'open') {
+    const linked = readLinkedProduct();
+    const result = linked ? await getListing(linked.type, linked.productId) : {};
+    const url = String(result.url || `${apiBase()}/dashboard`);
+    print({ url }, json, [url]); if (!json) { try { openUrl(url); } catch { /* URL already printed. */ } } return;
   }
-
-  try {
-    if (!command) return menu();
-    if (command === "login") {
-      await login(json);
-      if (!json) return menu();
-      return;
-    }
-    if (command === "logout") return logout(json);
-    if (command === "submit") return submit(json, Boolean(flags.force));
-    if (command === "update") return update(json);
-    if (command === "status") return status(json);
-    if (command === "open") return openListing(json);
-    fail(`Unknown command: ${command}`, json);
-  } catch (error) {
-    fail(error instanceof Error ? error.message : "Something went wrong.", json);
-  }
+  if (command) throw new Error(`Unknown command: ${command}`);
+  if (json) throw new Error('Choose a command with --json.');
+  interactive();
+  print(null, false, ['  1) Submit a build', '  2) Check listing status', '  3) Connect your account', '  4) Set up your AI agent', '  5) Open dashboard']);
+  const choice = await ask('Choose', '1');
+  if (choice === '1') return submit(flags);
+  if (choice === '2') return status(false);
+  if (choice === '3') return login(flags);
+  if (choice === '4') return main(['mcp-config']);
+  if (choice === '5') { print(null, false, [`${apiBase()}/dashboard`]); try { openUrl(`${apiBase()}/dashboard`); } catch {} return; }
+  throw new Error('Choose an option from 1 to 5.');
 }
 
-void main();
+void main().catch(error => {
+  const details = error instanceof ApiError ? { status: error.status, details: error.details } : {};
+  if (process.argv.includes('--json')) print({ success: false, error: error instanceof Error ? error.message : 'Command failed.', ...details }, true);
+  else process.stderr.write(`${terminalText(error instanceof Error ? error.message : 'Command failed.')}\n`);
+  process.exitCode = 1;
+});
