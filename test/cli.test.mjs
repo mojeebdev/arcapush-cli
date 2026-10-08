@@ -20,9 +20,13 @@ const server = createServer(async (req, res) => {
   calls.push({ path: req.url, method: req.method, body, auth: req.headers.authorization });
   res.setHeader('content-type', 'application/json');
   if (req.url === '/api/v1/cli/submissions' && req.method === 'GET') return res.end(JSON.stringify({ contractVersion: 1, types: {}, media: {} }));
+  if (req.url === '/api/v1/cli/not-here') { res.statusCode = 404; res.setHeader('content-type', 'text/html'); return res.end('<!doctype html><title>404</title>'); }
+  if (req.headers.authorization === 'Bearer apc_revoked') { res.statusCode = 401; return res.end('{"error":"Unauthorized","code":"token_invalid"}'); }
   if (req.headers.authorization !== 'Bearer apc_test') { res.statusCode = 401; return res.end('{"error":"Unauthorized"}'); }
   if (body?.payload?.name === 'Paused account') { res.statusCode = 403; return res.end(JSON.stringify({ error: 'Your account is paused. Open your dashboard for support.', code: 'account_paused' })); }
   if (body?.payload?.name === 'Reject me') { res.statusCode = 422; return res.end('{"error":"Invalid listing"}'); }
+  if (req.url?.startsWith('/api/v1/cli/submissions?contextId=')) { res.statusCode = 404; return res.end('{"error":"Submission draft not found."}'); }
+  if (body?.payload?.name === 'Undeclared account') { res.statusCode = 403; return res.end(JSON.stringify({ error: "Confirm you're 18 or older in your browser before publishing: sign in to Arcapush and open /dashboard.", code: 'declaration_required' })); }
   if (body?.action === 'validate') return res.end(JSON.stringify({ valid: true, contextId: body.contextId }));
   if (body?.action === 'submit') return res.end(JSON.stringify({ success: true, id: 'test-id', slug: 'test-build', type: body.type, status: body.type === 'product' ? 'pending_review' : 'published', href: '/test-build', message: 'Received.' }));
   return res.end(JSON.stringify({ success: true, name: 'Test build', status: 'published', url: 'https://arcapush.com/test-build' }));
@@ -135,5 +139,33 @@ test('CLI and MCP preserve policy errors without attempting submission', async (
     assert.equal(reply.isError, true);
     assert.equal(JSON.parse(reply.content[0].text).details.code, 'account_paused');
   } finally { await client.close(); }
+  assert.ok(!calls.slice(before).some(call => call.body?.action === 'submit'));
+});
+
+test('API errors keep the server message; only bodiless failures fall back', async () => {
+  const { request, apiErrorMessage } = await import('../dist/submissions.js');
+  const saved = { url: process.env.ARCAPUSH_API_URL, token: process.env.ARCAPUSH_TOKEN };
+  process.env.ARCAPUSH_API_URL = base; process.env.ARCAPUSH_TOKEN = 'apc_test';
+  try {
+    // A missing draft is a missing draft, not an outdated server.
+    await assert.rejects(request('/api/v1/cli/submissions?contextId=00000000-0000-4000-8000-000000000000'), { message: 'Submission draft not found.', status: 404 });
+    await assert.rejects(request('/api/v1/cli/not-here'), /does not offer that CLI endpoint/);
+    process.env.ARCAPUSH_TOKEN = 'apc_revoked';
+    await assert.rejects(request('/api/v1/cli/listings/product/x'), (error) => /expired or was revoked\. Run arcapush login\./.test(error.message) && error.details.code === 'token_invalid');
+  } finally {
+    process.env.ARCAPUSH_API_URL = saved.url; process.env.ARCAPUSH_TOKEN = saved.token;
+  }
+  assert.equal(apiErrorMessage(403, { error: 'Your account is paused.', code: 'account_paused' }, true), 'Your account is paused.');
+  assert.equal(apiErrorMessage(500, {}, true), 'API request failed (500).');
+});
+
+test('declaration_required points to the configured origin dashboard and never submits', async () => {
+  const data = input('product'); data.payload.name = 'Undeclared account';
+  const file = join(temp, 'undeclared.json'); writeFileSync(file, JSON.stringify(data));
+  const before = calls.length;
+  const result = await run(['submit', '--input', file, '--yes']);
+  assert.equal(result.code, 1);
+  assert.match(result.stderr, /18 or older/);
+  assert.ok(result.stderr.includes(`${base}/dashboard`), result.stderr);
   assert.ok(!calls.slice(before).some(call => call.body?.action === 'submit'));
 });

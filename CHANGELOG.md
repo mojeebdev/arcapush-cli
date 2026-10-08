@@ -7,15 +7,22 @@ Patch release. Published npm 0.2.0 cannot be changed, so the corrections ship he
 ### Fixed
 
 - LICENSE now opens with the project notice "Copyright 2026 BlindspotLab Limited", followed by the unchanged Apache License 2.0 text. NOTICE, LICENSE-MIT-LEGACY and third-party notices are unchanged.
+- API errors keep the server's message. Every 404 on the submissions path was reported as "This server does not support CLI 0.2 submissions yet", including a missing draft returned by `arcapush_submission_status` ("Submission draft not found."). Only a response without a JSON error now falls back to a generic message.
+- A revoked or expired token (`token_invalid`) now says the CLI session ended and to run `arcapush login`, instead of a bare "Unauthorized". The code stays in JSON/MCP error details.
+- `declaration_required` adds the configured origin's dashboard URL to the server's instruction.
 
 ### Changed
 
 - Release process is version-generic: releases come from a `vX.Y.Z` tag or a manual run on `main` (the `release/0.2.0` branch trigger is removed). The preflight checks the tag, the shown CLI version, the lockfile and the CHANGELOG section, keeps the existing-version checksum check, and GitHub release notes contain only this version's section.
 - Every CI publish stays on the npm `next` tag. Promotion to `latest` is a separate maintainer step after the production companion API is deployed and live checks pass.
 
+### Compatibility
+
+No breaking changes. Commands, flags, JSON output shapes, MCP tool names and schemas are unchanged from 0.2.0. Checked against the production API at https://arcapush.com (submission contract v1).
+
 ### Release requirements
 
-Same as 0.2.0: deploy and verify the companion Arcapush API first. Install explicitly with `npm install -g @blindspotlab/arcapush@0.2.1`.
+The production companion API is live. Publish to `next`, complete a real `arcapush login` and one authorized submission against production, then promote 0.2.1 to `latest`.
 
 ## 0.2.0 — 2026-10-08
 

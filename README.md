@@ -4,11 +4,17 @@ Good products deserve to be discovered.
 
 Submit products, AI agents and hackathon builds from a guided terminal flow or an MCP-compatible AI agent. Package: `@blindspotlab/arcapush`, executable: `arcapush`, Node.js **22+**.
 
-## Release prerequisite
+## Release status
 
-CLI **0.2.x** requires the companion Arcapush submission API update. Deploy and test that update before promoting this package to the stable npm tag. Until then, 0.2.x is published under the `next` tag and `latest` stays on 0.1.2; install it with an explicit version. An older server returns an actionable compatibility error; the CLI does not silently fall back to the product-only endpoint.
+The production Arcapush API that CLI **0.2.x** needs is live at **https://arcapush.com** (Cloudflare Workers, deployed 2026-10-08). CLI **0.2.1** is checked against it.
 
-The CLI version is independent of the web application's 0.4.0 version.
+| npm tag | Version | Notes |
+| --- | --- | --- |
+| `latest` | 0.1.2 | Product-only legacy CLI. |
+| `next` | 0.2.0 | Superseded by 0.2.1. |
+| — | **0.2.1** | Prepared, not yet published. Publishes to `next`, then is promoted to `latest` after a live sign-in and submission check. |
+
+Until 0.2.1 is promoted, install it with an explicit version. The CLI version is independent of the web application's 0.4.0 version.
 
 ## Install and connect
 
@@ -19,6 +25,13 @@ npm install -g @blindspotlab/arcapush@0.2.1
 arcapush --version
 arcapush login
 arcapush
+```
+
+Or run it without installing:
+
+```sh
+npx @blindspotlab/arcapush@0.2.1 login
+npx @blindspotlab/arcapush@0.2.1 submit
 ```
 
 Before publishing, from this repository:
@@ -36,6 +49,8 @@ arcapush
 Login opens your browser and displays a verification URL and code. Complete normal web sign-in, eligibility/onboarding, and device approval. `arcapush login --no-browser` displays the URL without opening a browser. A browser is required for authentication; agents do not log in on your behalf.
 
 Existing CLI users must log in again to approve the new `submission:create` and `submission:read:own` scopes. Old tokens are not silently upgraded. Accounts restricted by the website remain restricted in the API. Arcapush accounts are 18+. Complete the declaration yourself in the browser; OAuth login does not establish adulthood.
+
+A token that was revoked (from `/dashboard/cli` or `arcapush logout`) or has expired returns `token_invalid`; the CLI says so and asks you to run `arcapush login` again.
 
 Eligibility errors keep their machine-readable code in JSON/MCP error details: `declaration_required` means open your configured Arcapush origin’s `/dashboard` in a browser; `account_paused` or `not_eligible` means use the support/review options there. Do not retry by changing credentials or asking an agent to declare your age. `scope_missing` requires signing in again to grant the new permissions. Public browsing and the public submission schema remain open. Token revocation remains available while paused.
 
@@ -104,7 +119,20 @@ This is a **local stdio MCP server** packaged with the CLI. It is not a public r
 }
 ```
 
-`arcapush mcp-config` prints this configuration. Host-specific settings filenames vary. Restart the host after configuration changes.
+Without a global install, let the host run the pinned package through npx:
+
+```json
+{
+  "mcpServers": {
+    "arcapush": {
+      "command": "npx",
+      "args": ["-y", "@blindspotlab/arcapush@0.2.1", "mcp"]
+    }
+  }
+}
+```
+
+`arcapush mcp-config` prints the global-install configuration. Host-specific settings filenames vary. Restart the host after configuration changes.
 
 On Windows, if the host cannot resolve the npm command shim, use the installed script directly. Run `npm.cmd root -g`, append `@blindspotlab/arcapush/dist/cli.js`, then configure:
 
@@ -156,6 +184,34 @@ Status works for all three listing types. Updates retain the existing **product-
 
 Logout revokes the token and removes local credentials. If the network fails, revoke it at `/dashboard/cli`. If using an environment token, also unset `ARCAPUSH_TOKEN`.
 
+## Production API
+
+The CLI talks only to the configured origin (default `https://arcapush.com`). It uses these endpoints:
+
+| Endpoint | Used by | Auth |
+| --- | --- | --- |
+| `POST /api/v1/cli/auth/start` | `login` — creates a device code | none |
+| `/cli/authorize` (browser) | You approve the device after web sign-in | web session |
+| `POST /api/v1/cli/auth/token` | `login` — polls for approval | device code |
+| `POST /api/v1/cli/auth/revoke` | `logout` | token |
+| `GET /api/v1/cli/submissions` | `schema`, wizard, MCP schema tool | none |
+| `POST /api/v1/cli/submissions` (`action: validate` / `submit`) | `submit`, MCP prepare/submit | token |
+| `GET /api/v1/cli/submissions?contextId=` | MCP submission recovery | token |
+| `POST /api/v1/cli/media` | local media uploads | token |
+| `GET /api/v1/cli/listings/{type}/{id}` | `status`, `open`, MCP listing status | token |
+| `PATCH /api/v1/cli/products/{id}` | `update` (products only) | token |
+
+Error responses are JSON `{ error, code? }`. The CLI shows the server's message; only a response without one falls back to a generic message. Codes you may see: `token_invalid`, `scope_missing`, `declaration_required`, `account_paused`, `not_eligible`.
+
+### Environment variables
+
+| Name | Purpose |
+| --- | --- |
+| `ARCAPUSH_API_URL` | API origin (HTTPS; HTTP only for loopback). Default `https://arcapush.com`. |
+| `ARCAPUSH_TOKEN` | Use this token instead of the saved one (for CI). Never commit it. |
+| `ARCAPUSH_PROJECT_DIR` | Directory the MCP server may read local media from (same as `--project-dir`). |
+| `NO_COLOR` | Disable colour output. |
+
 ## Staging and credentials
 
 macOS/Linux:
@@ -178,13 +234,12 @@ Saved tokens are isolated by API origin. Legacy production tokens migrate on the
 
 ## Maintainer: test, pack and release
 
-Deploy the companion API first, complete staging sign-in, and test one authorized submission of each type. Automated tests use a mock HTTP API and a real local MCP transport; they do not prove live database or OAuth configuration.
+Before promoting a release, complete a real `arcapush login` against production and one authorized submission (a product enters review, so it is the safest live check). Automated tests use a mock HTTP API and a real local MCP transport; they do not prove live database or OAuth configuration.
 
 ```powershell
 npm.cmd ci
 npm.cmd test
 npm.cmd pack --dry-run
-
 ```
 
 The package's `prepack` hook builds `dist`. Published npm versions are immutable. For a new release, run `npm version X.Y.Z --no-git-tag-version` (updates `package.json` and the lockfile), set the same `CLI_VERSION` in `src/lib.ts`, and add a `## X.Y.Z` section to CHANGELOG.md.
