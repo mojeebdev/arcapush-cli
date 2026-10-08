@@ -108,7 +108,8 @@ export function onboardingScreen(stage: 1 | 2 | 3 | 4, selected?: ListingType, i
 }
 
 export function showOnboarding(stage: 1 | 2 | 3 | 4, selected?: ListingType, ascii = false, reservedRows = 0): void {
-  if (process.stdout.isTTY && process.env.TERM !== "dumb") process.stdout.write("\x1b[2J\x1b[H");
+  // Home then erase below. ED 2 can move a cleared viewport into scrollback.
+  if (process.stdout.isTTY && process.env.TERM !== "dumb") process.stdout.write("\x1b[H\x1b[J");
   process.stdout.write(onboardingScreen(stage, selected, { ascii: ascii || process.env.TERM === "dumb", height: (process.stdout.rows ?? 40) - reservedRows }));
 }
 
@@ -131,13 +132,21 @@ export async function chooseListingType(ascii = false): Promise<ListingType> {
   }
   return new Promise((resolve, reject) => {
     let selected = 0;
+    let closed = false;
+    let previousFrame = "";
     const wasRaw = Boolean(stdin.isRaw);
     const draw = () => {
+      if (closed) return;
+      const frame = `${selected}:${stdout.columns}:${stdout.rows}`;
+      if (frame === previousFrame) return;
+      previousFrame = frame;
       const hint = wrapText("Arrow keys to choose · Enter to continue · Esc to cancel".replaceAll("·", ascii ? "|" : "·"), stdout.columns ?? 80);
       showOnboarding(2, listingTypes[selected], ascii, hint.split("\n").length + 1);
       stdout.write(hint + "\n");
     };
     const cleanup = () => {
+      if (closed) return;
+      closed = true;
       stdin.off("keypress", onKey);
       stdin.off("end", onEnd);
       stdout.off("resize", draw);
@@ -146,7 +155,8 @@ export async function chooseListingType(ascii = false): Promise<ListingType> {
       process.off("SIGHUP", onEnd);
       stdin.setRawMode(wasRaw);
       stdin.pause();
-      stdout.write("\x1b[?25h");
+      // Restore the shell buffer and cursor on Enter, cancellation and signals.
+      stdout.write("\x1b[?1049l\x1b[?25h");
     };
     const onEnd = () => { cleanup(); reject(new OnboardingCancelled()); };
     const onKey = (_text: string, key: Key) => {
@@ -168,7 +178,9 @@ export async function chooseListingType(ascii = false): Promise<ListingType> {
     process.once("SIGTERM", onEnd);
     process.once("SIGINT", onEnd);
     process.once("SIGHUP", onEnd);
-    stdout.write("\x1b[?25l");
+    // Live redraws belong in a buffer without scrollback, particularly on ConPTY.
+    // Never erase the user's shell scrollback with ED 3.
+    stdout.write("\x1b[?1049h\x1b[?25l");
     draw();
   });
 }

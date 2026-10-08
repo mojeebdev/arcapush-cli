@@ -1,6 +1,6 @@
 # Arcapush agent guide
 
-Package: @blindspotlab/arcapush 0.2.3. Runtime: Node.js >=22. Transport: local stdio MCP. Copyright 2026 BlindspotLab Limited. Licence: Apache-2.0; legacy MIT notice preserved.
+Package: @blindspotlab/arcapush 0.2.4. Runtime: Node.js >=22. Transport: local stdio MCP. Copyright 2026 BlindspotLab Limited. Licence: Apache-2.0; legacy MIT notice preserved.
 
 1. A human installs the CLI and runs `arcapush login`. Never request an account token in chat.
 2. Start `arcapush mcp`. For local files, the operator must opt in with `arcapush mcp --project-dir /absolute/project/path`. The agent cannot change this root through a tool argument.

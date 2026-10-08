@@ -61,6 +61,7 @@ class API(BaseHTTPRequestHandler):
 
 class Terminal:
     def __init__(self, cwd, token="apc_mock", width=80, extra_env=None):
+        self.events = []
         self.master, self.slave = pty.openpty()
         self.resize(width)
         env = dict(os.environ, TERM="xterm-256color", ARCAPUSH_TOKEN=token,
@@ -71,8 +72,9 @@ class Terminal:
                                         stdin=self.slave, stdout=self.slave, stderr=self.slave)
         self.output = b""
 
-    def resize(self, width):
-        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", 60, width, 0, 0))
+    def resize(self, width, rows=24):
+        self.events.append({"resize": [width, rows]})
+        fcntl.ioctl(self.slave, termios.TIOCSWINSZ, struct.pack("HHHH", rows, width, 0, 0))
         if hasattr(self, "process"):
             self.process.send_signal(signal.SIGWINCH)
 
@@ -83,7 +85,9 @@ class Terminal:
             if time.monotonic() > deadline:
                 raise AssertionError(f"Missing {text!r}: {self.output.decode(errors='replace')}")
             if select.select([self.master], [], [], .1)[0]:
-                self.output += os.read(self.master, 65536)
+                chunk = os.read(self.master, 65536)
+                self.output += chunk
+                self.events.append({"write": chunk.decode(errors="replace")})
         return self.output.decode(errors="replace")
 
     def send(self, data):
@@ -119,6 +123,7 @@ try:
             terminal = Terminal(directory)
             try:
                 screen = terminal.expect("Arrow keys to choose")
+                assert screen.count("Good products deserve") == 1, "Startup printed the interface more than once"
                 assert "Choose (1)" not in screen and "Review and submit" in screen
                 assert "█" in screen
                 terminal.send(keys)
@@ -143,6 +148,28 @@ try:
                 terminal.close()
         print("PASS: all 3 type choices, details, media, optional passport, review cancellation and saved drafts")
 
+        # Replay real TTY bytes through the same terminal engine used by VS Code.
+        terminal = Terminal(root, width=47)
+        try:
+            terminal.expect("to cancel")
+            terminal.events.append({"checkpoint": "selector"})
+            for width in [68, 75, 47, 75]:
+                terminal.output = b""
+                terminal.resize(width)
+                terminal.expect("to cancel")
+                terminal.events.append({"checkpoint": "selector"})
+            terminal.send(b"\x1b[C")
+            terminal.expect("to cancel")
+            terminal.events.append({"checkpoint": "selector"})
+            terminal.send(b"\x1b")
+            terminal.expect("Cancelled. Nothing was submitted.")
+            terminal.events.append({"checkpoint": "restored"})
+            terminal.finish(130)
+            subprocess.run(["node", str(ROOT / "scripts/check-terminal-replay.mjs")],
+                           input=json.dumps(terminal.events), text=True, check=True)
+        finally:
+            terminal.close()
+
         # A saved draft bypasses the type selector and retains its listing type.
         terminal = Terminal(root / "agent")
         try:
@@ -163,7 +190,8 @@ try:
                 assert "█" in screen
                 terminal.resize(100)
                 terminal.send(key)
-                terminal.expect("Cancelled. Nothing was submitted.")
+                cancelled = terminal.expect("Cancelled. Nothing was submitted.")
+                assert "\x1b[?1049l" in cancelled and "\x1b[?25h" in cancelled
                 terminal.finish(130)
                 assert len(CALLS) == before
             finally:

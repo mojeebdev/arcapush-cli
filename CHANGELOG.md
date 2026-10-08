@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.2.4 — 2026-10-08
+
+### Fixed
+
+- Remove the redundant stage-2 placeholder printed before the build-type selector on startup.
+- Keep the live selector in the alternate terminal buffer so resizing and arrow-key navigation replace the current screen without adding interface copies to shell scrollback. Restore the original buffer and cursor on selection, cancellation and termination signals.
+- Home the cursor before erasing the current screen, avoid full-screen ED 2 scrollback behavior, and skip resize events that do not change the frame.
+
+### Verification
+
+- Add a regression that fails on 0.2.3's duplicate startup output. Replay real pseudo-terminal bytes through xterm in normal and ConPTY modes to check one visible interface after startup, four width changes and navigation, plus preserved shell history on exit.
+- Run terminal regressions in the Node 22/24 CI matrix and the publication workflow. The terminal emulator is a development-only dependency.
+
 ## 0.2.3 — 2026-10-08
 
 ### Fixed

@@ -86,9 +86,10 @@ async function login(flags: Flags): Promise<void> {
 
 async function wizard(typeFlag?: string, ascii = false): Promise<SubmissionInput> {
   interactive();
-  showOnboarding(2, undefined, ascii);
   const draftFile = '.arcapush-submission.json';
-  const resumed = !typeFlag && existsSync(draftFile) && await confirm('Resume the saved submission?', true) ? readSubmission(draftFile) : null;
+  const hasDraft = !typeFlag && existsSync(draftFile);
+  if (hasDraft) showOnboarding(2, undefined, ascii);
+  const resumed = hasDraft && await confirm('Resume the saved submission?', true) ? readSubmission(draftFile) : null;
   const previousPayload = resumed ? JSON.stringify(resumed.payload) : null;
   const previousContext = resumed?.contextId;
   let type = (resumed?.type || typeFlag) as ListingType | undefined;

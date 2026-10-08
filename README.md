@@ -33,7 +33,7 @@ To run the current stable version without a global install:
 npx --yes @blindspotlab/arcapush@latest
 ```
 
-This package release is **0.2.3**. The CLI and website have separate version numbers.
+This package release is **0.2.4**. The CLI and website have separate version numbers.
 
 ### Still seeing the old menu?
 
@@ -127,7 +127,7 @@ Alternatively, use the pinned package without a global install:
   "mcpServers": {
     "arcapush": {
       "command": "npx",
-      "args": ["-y", "@blindspotlab/arcapush@0.2.3", "mcp"]
+      "args": ["-y", "@blindspotlab/arcapush@0.2.4", "mcp"]
     }
   }
 }
