@@ -121,7 +121,7 @@ test('saved credentials are isolated by origin', () => {
   } finally { process.env = original; }
 });
 test('MCP performs a real stdio handshake and prepare/approve/submit flow', async () => {
-  const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp'], env, stderr: 'pipe' });
+  const transport = new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--local'], env, stderr: 'pipe' });
   const client = new Client({ name: 'arcapush-test', version: '1.0.0' });
   try {
     await client.connect(transport);
@@ -148,7 +148,7 @@ test('CLI and MCP preserve policy errors without attempting submission', async (
   assert.equal(JSON.parse(result.stdout).details.code, 'account_paused');
   const client = new Client({ name: 'policy-test', version: '1.0.0' });
   try {
-    await client.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp'], env, stderr: 'pipe' }));
+    await client.connect(new StdioClientTransport({ command: process.execPath, args: [cli, 'mcp', '--local'], env, stderr: 'pipe' }));
     const reply = await client.callTool({ name: 'arcapush_prepare_submission', arguments: data });
     assert.equal(reply.isError, true);
     assert.equal(JSON.parse(reply.content[0].text).details.code, 'account_paused');
@@ -182,4 +182,13 @@ test('declaration_required points to the configured origin dashboard and never s
   assert.match(result.stderr, /18 or older/);
   assert.ok(result.stderr.includes(`${base}/dashboard`), result.stderr);
   assert.ok(!calls.slice(before).some(call => call.body?.action === 'submit'));
+});
+
+test('MCP configuration defaults to URL and retains explicit local mode', async () => {
+  const remote = await run(['mcp-config']);
+  assert.equal(remote.code, 0);
+  assert.equal(JSON.parse(remote.stdout).mcpServers.arcapush.url, 'https://mcp.arcapush.com/mcp');
+  const local = await run(['mcp-config', '--local']);
+  assert.equal(local.code, 0);
+  assert.deepEqual(JSON.parse(local.stdout).mcpServers.arcapush.args, ['mcp', '--local']);
 });

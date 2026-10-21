@@ -96,7 +96,9 @@ Use relative paths inside your project, such as `public/logo.png`. Local uploads
 | `arcapush open` | Open the linked listing, or your dashboard if none is linked |
 | `arcapush update --input update.json --yes` | Apply reviewed changes to a linked product |
 | `arcapush schema --json` | Read current submission fields and categories |
-| `arcapush mcp-config` | Print an MCP configuration |
+| `arcapush mcp-config` | Print hosted MCP URL configuration |
+| `arcapush mcp-login` | Authorize the remote stdio bridge |
+| `arcapush mcp-logout` | Revoke the remote OAuth grant |
 | `arcapush logout` | Revoke the session and remove local credentials |
 | `arcapush --help` | Show commands and options |
 | `arcapush --version` | Show the installed version |
@@ -105,43 +107,55 @@ The CLI saves a listing link in `arcapush.json`. Run status/update commands from
 
 ## Use with an AI assistant
 
-Arcapush includes a **local stdio MCP server**. It lets a compatible assistant read submission requirements, prepare a listing for review, submit it after approval, and check its status.
+The remote MCP service targets **https://mcp.arcapush.com/mcp**, using HTTPS Streamable HTTP and browser OAuth. **Deployment gate:** this endpoint must pass the live checks in the [remote MCP guide](docs/remote-mcp.md) before publishing this CLI version. A URL in this README does not mean the service is deployed.
 
-Install the CLI and run `arcapush login` first. Add this to your MCP host's configuration:
+Browser clients do not need Node.js or the CLI. Add the URL through your client's custom MCP connection settings, select OAuth, then sign in and approve Arcapush access. Return to the connection page and choose whether the assistant may submit listings.
 
-```json
-{
-  "mcpServers": {
-    "arcapush": {
-      "command": "arcapush",
-      "args": ["mcp"]
-    }
-  }
-}
-```
+| Client | Connection |
+| --- | --- |
+| ChatGPT web | Add a custom MCP app/server in settings where enabled for your plan or workspace. Enter the URL and choose OAuth. |
+| Claude web or Desktop | Settings → Connectors → Add custom connector. Enter the URL and connect. |
+| Cursor | Add the URL to your MCP configuration, then complete OAuth. |
+| Gemini CLI | `gemini mcp add --transport http arcapush https://mcp.arcapush.com/mcp`, then authenticate from `/mcp`. |
+| Gemini Enterprise | Use the custom MCP server connector with Streamable HTTP and OAuth, subject to administrator setup. |
+| Consumer Gemini web | Do not assume arbitrary custom MCP URLs are supported. Use a Google surface that explicitly supports remote MCP. |
 
-Alternatively, use the pinned package without a global install:
+A URL-capable configuration such as Cursor's looks like:
 
 ```json
 {
   "mcpServers": {
-    "arcapush": {
-      "command": "npx",
-      "args": ["-y", "@blindspotlab/arcapush@0.2.4", "mcp"]
-    }
+    "arcapush": { "url": "https://mcp.arcapush.com/mcp" }
   }
 }
 ```
 
-Host configuration locations vary. Restart your host after updating its configuration. On Windows, if the host cannot resolve npm command shims, run `npm.cmd root -g` and use `node` with the absolute path to `@blindspotlab/arcapush/dist/cli.js`, followed by `mcp`.
+`arcapush mcp-config` prints the URL configuration. For a host that only starts local stdio commands, use the CLI as a bridge to the same remote service:
+
+```sh
+arcapush mcp-login
+arcapush mcp
+```
+
+Then configure that host with `{"command":"arcapush","args":["mcp"]}`. OAuth credentials are stored locally per endpoint with restricted file permissions. Regular `arcapush login` remains for terminal submissions; MCP uses its own scoped OAuth connection. `arcapush mcp-logout` revokes that OAuth grant and removes its local credentials. Revoke the underlying account connection in [Dashboard → CLI sessions](https://arcapush.com/dashboard/cli).
 
 Ask your assistant:
 
 > Prepare my product for Arcapush. Ask me for missing information, show me the complete listing and wait for my approval before submitting.
 
-Configure the host to require approval for `arcapush_submit`. Local media access is off by default; opt in with `"args": ["mcp", "--project-dir", "/absolute/path/to/project"]`. The assistant cannot expand this allowed directory through a tool call. Never paste account tokens into chat.
+Require host approval for `arcapush_submit`. The server signs the exact review, binds it to the connection, and expires it after 30 minutes. A `confirmed:true` argument is not independent proof of human approval. Remote MCP supports public media URLs and cannot access your filesystem. Never paste account tokens into chat.
 
-See the [agent guide](docs/agent-guide.md) for tool names, approval rules, file limits and recovery after an interrupted submission.
+### Local project media
+
+The original local server remains available explicitly:
+
+```sh
+arcapush login
+arcapush mcp --local --project-dir /absolute/path/to/project
+arcapush mcp-config --local
+```
+
+The operator chooses the allowed directory. The assistant cannot expand it. Local media uploads happen only after approval. Existing configurations must add `--local` to keep the previous behavior when upgrading. See the [agent guide](docs/agent-guide.md) and [migration guide](docs/remote-mcp.md).
 
 ## JSON submissions and automation
 

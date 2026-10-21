@@ -22,7 +22,10 @@ Usage:
   arcapush status [--json]        Status of the linked listing
   arcapush update --input update.json --yes [--json]
   arcapush open                   Open the linked listing
-  arcapush mcp [--project-dir DIR] Start MCP; opt into local media within DIR
+  arcapush mcp                    Bridge stdio to hosted MCP (run mcp-login first)
+  arcapush mcp --local [--project-dir DIR] Use local tools and optional local media
+  arcapush mcp-login              Connect hosted MCP through browser OAuth
+  arcapush mcp-logout             Revoke hosted MCP OAuth credentials
   arcapush mcp-config             Print MCP host configuration
 
 Options: --json --input FILE --type TYPE --project-dir DIR --dry-run --yes --ascii --no-browser
@@ -35,7 +38,7 @@ type Flags = Record<string, string | boolean>;
 export function args(argv: string[]): { command: string; flags: Flags } {
   let command = ''; const flags: Flags = {};
   const values = new Set(['input', 'type', 'project-dir']);
-  const booleans = new Set(['json', 'yes', 'dry-run', 'ascii', 'no-browser', 'help', 'version']);
+  const booleans = new Set(['json', 'yes', 'dry-run', 'ascii', 'no-browser', 'help', 'version', 'local']);
   for (let i = 0; i < argv.length; i++) {
     const part = argv[i];
     if (part === '-h') { flags.help = true; continue; }
@@ -195,8 +198,11 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   const json = Boolean(flags.json);
   if (flags.help) { process.stdout.write(HELP); return; }
   if (flags.version) { process.stdout.write(`${CLI_VERSION}\n`); return; }
+  if (command === 'mcp-login') { const { connectRemote } = await import('./remote-mcp.js'); const client = await connectRemote(true); await client.close(); process.stderr.write('Remote MCP connected. Run arcapush mcp or use the hosted URL in your AI client.\n'); return; }
+  if (command === 'mcp-logout') { const { remoteLogout } = await import('./remote-mcp.js'); await remoteLogout(); return; }
+  if (command === 'mcp' && !flags.local) { if (flags['project-dir'] || process.env.ARCAPUSH_PROJECT_DIR) throw new Error('Local media requires arcapush mcp --local --project-dir DIR.'); const { startRemoteMcp } = await import('./remote-mcp.js'); await startRemoteMcp(); return; }
   if (command === 'mcp') { const { startMcp } = await import('./mcp.js'); await startMcp(typeof flags['project-dir'] === 'string' ? flags['project-dir'] : process.env.ARCAPUSH_PROJECT_DIR); return; }
-  if (command === 'mcp-config') { print({ mcpServers: { arcapush: { command: 'arcapush', args: ['mcp'] } } }, true); return; }
+  if (command === 'mcp-config') { const { mcpUrl } = await import('./remote-mcp.js'); print({ mcpServers: { arcapush: flags.local ? { command: 'arcapush', args: ['mcp', '--local'] } : { url: mcpUrl().href } } }, true); return; }
   if (command === 'schema') { const schema = await getSchema(); print(schema, json, [JSON.stringify(schema, null, 2)]); return; }
   if (!json && process.stdout.isTTY && command === 'login') banner(Boolean(flags.ascii));
   if (command === 'login') return login(flags);

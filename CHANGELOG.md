@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased: remote MCP
+
+- Add a URL-based configuration and OAuth-authorized stdio bridge to the hosted MCP service.
+- Keep local project tools under `mcp --local`; migrate existing configs before upgrading.
+- Gate publication on companion service deployment and live verification.
+
 ## 0.2.4 — 2026-10-08
 
 ### Fixed
