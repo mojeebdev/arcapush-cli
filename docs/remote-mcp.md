@@ -2,7 +2,7 @@
 
 Target endpoint: `https://mcp.arcapush.com/mcp`. Transport: Streamable HTTP. Authentication: OAuth 2.1 with S256 PKCE. This is a deployment-gated implementation, not a claim of production availability.
 
-The companion server lives in `mojeebdev/arcapush/workers/mcp`. Deploy and test it before releasing the CLI changes. Publish this CLI only after unauthenticated access returns 401 with discovery, browser consent works, and an authenticated SDK client can initialize, list tools, prepare and recover submissions. Test account revocation, refresh rotation, wrong-account access, scope restrictions and a consented staging submission. Never use a fabricated production listing to test writes.
+MCP runs inside the existing `arcapush-production` Worker, with `mcp.arcapush.com` routed through `cloudflare/worker.ts`. `mojeebdev/arcapush/workers/mcp` contains source and tests only; it is not a separately deployed service. Deploy from the Arcapush repository root using its existing production command/workflow, then test it before releasing the CLI changes. Publish this CLI only after unauthenticated access returns 401 with discovery, browser consent works, and an authenticated SDK client can initialize, list tools, prepare and recover submissions. Test account revocation, refresh rotation, wrong-account access, scope restrictions and a consented staging submission. Never use a fabricated production listing to test writes.
 
 ## CLI behavior changes
 
