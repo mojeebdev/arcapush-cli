@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased: ship log
+
+- Add `arcapush ship "…"` to post a short update (at most 500 characters, optional `--link` https URL) to the public ship log of a published listing you own. It uses the linked `arcapush.json` listing or `--listing TYPE:ID`, validates on the server first, shows the exact post and asks before posting. `--dry-run` validates only; `--yes` and `--json` work as for `submit`.
+- Needs the server endpoint `/api/v1/cli/ship` (Arcapush web, v4 ship log). Publish only after that is deployed.
+
 ## Unreleased: remote MCP
 
 - Add a URL-based configuration and OAuth-authorized stdio bridge to the hosted MCP service.

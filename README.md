@@ -95,6 +95,7 @@ Use relative paths inside your project, such as `public/logo.png`. Local uploads
 | `arcapush status` | Check the listing linked to this directory |
 | `arcapush open` | Open the linked listing, or your dashboard if none is linked |
 | `arcapush update --input update.json --yes` | Apply reviewed changes to a linked product |
+| `arcapush ship "Shipped dark mode." [--link URL] [--listing TYPE:ID]` | Post an update (at most 500 characters) to the public ship log of a published listing you own. Validates first and asks before posting; `--dry-run` posts nothing, `--yes` skips the prompt |
 | `arcapush schema --json` | Read current submission fields and categories |
 | `arcapush mcp-config` | Print hosted MCP URL configuration |
 | `arcapush mcp-login` | Authorize the remote stdio bridge |

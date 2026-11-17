@@ -21,6 +21,8 @@ Usage:
   arcapush schema [--json]        Current server fields and submission steps
   arcapush status [--json]        Status of the linked listing
   arcapush update --input update.json --yes [--json]
+  arcapush ship "What you shipped" [--link URL] [--listing TYPE:ID] [--dry-run] [--yes] [--json]
+                                  Post an update to the listing's public ship log
   arcapush open                   Open the linked listing
   arcapush mcp                    Bridge stdio to hosted MCP (run mcp-login first)
   arcapush mcp --local [--project-dir DIR] Use local tools and optional local media
@@ -28,22 +30,27 @@ Usage:
   arcapush mcp-logout             Revoke hosted MCP OAuth credentials
   arcapush mcp-config             Print MCP host configuration
 
-Options: --json --input FILE --type TYPE --project-dir DIR --dry-run --yes --ascii --no-browser
+Options: --json --input FILE --type TYPE --project-dir DIR --link URL --listing TYPE:ID --dry-run --yes --ascii --no-browser
 Node.js 22+. Sign in once before using an AI agent.
 Metadata detection reads package.json, README, git remote and logo paths locally.
 Review fields before submission. Source files are not uploaded.
 `;
 
 type Flags = Record<string, string | boolean>;
-export function args(argv: string[]): { command: string; flags: Flags } {
-  let command = ''; const flags: Flags = {};
-  const values = new Set(['input', 'type', 'project-dir']);
+export function args(argv: string[]): { command: string; flags: Flags; text?: string } {
+  let command = ''; let text: string | undefined; const flags: Flags = {};
+  const values = new Set(['input', 'type', 'project-dir', 'link', 'listing']);
   const booleans = new Set(['json', 'yes', 'dry-run', 'ascii', 'no-browser', 'help', 'version', 'local']);
   for (let i = 0; i < argv.length; i++) {
     const part = argv[i];
     if (part === '-h') { flags.help = true; continue; }
     if (part === '-v') { flags.version = true; continue; }
-    if (!part.startsWith('-')) { if (command) throw new Error(`Unexpected argument: ${part}`); command = part; continue; }
+    if (!part.startsWith('-')) {
+      // Only `ship` takes a positional value: the update text.
+      if (command === 'ship' && text === undefined) { text = part; continue; }
+      if (command) throw new Error(`Unexpected argument: ${part}`);
+      command = part; continue;
+    }
     const equal = part.indexOf('=');
     const key = part.slice(2, equal < 0 ? undefined : equal);
     if (values.has(key)) {
@@ -53,7 +60,7 @@ export function args(argv: string[]): { command: string; flags: Flags } {
     } else if (booleans.has(key) && equal < 0) flags[key] = true;
     else throw new Error(`Unknown option: ${part}`);
   }
-  return { command, flags };
+  return { command, flags, ...(text === undefined ? {} : { text }) };
 }
 
 function print(data: unknown, json: boolean, lines: string[] = []): void {
@@ -193,8 +200,37 @@ async function update(flags: Flags): Promise<void> {
   print(result, Boolean(flags.json), ['Product updated.']);
 }
 
+const SHIP_MAX = 500;
+/** Posts a short update to the public ship log of a published listing you own. */
+async function ship(text: string | undefined, flags: Flags): Promise<void> {
+  const json = Boolean(flags.json);
+  const body = (text ?? '').trim();
+  if (!body) throw new Error('Write the update: arcapush ship "Shipped dark mode."');
+  if (body.length > SHIP_MAX) throw new Error(`A ship-log post is at most ${SHIP_MAX} characters (this one is ${body.length}).`);
+  let type: string; let id: string;
+  if (typeof flags.listing === 'string') {
+    const match = /^(product|agent|hackathon):([A-Za-z0-9_-]{1,128})$/.exec(flags.listing);
+    if (!match) throw new Error('--listing must be TYPE:ID, e.g. product:clx123.');
+    [, type, id] = match;
+  } else {
+    const linked = readLinkedProduct();
+    if (!linked) throw new Error('No arcapush.json in this directory. Use --listing TYPE:ID.');
+    type = linked.type; id = linked.productId;
+  }
+  const link = typeof flags.link === 'string' ? flags.link : undefined;
+  if (link && !/^https:\/\//i.test(link)) throw new Error('--link must be an https:// URL.');
+  const draft = { type, id, body, ...(link ? { link } : {}) };
+  const checked = await request('/api/v1/cli/ship', 'POST', { ...draft, action: 'validate' });
+  const review = (checked.review ?? draft) as Payload;
+  if (flags['dry-run']) { print({ success: true, valid: true, review }, json, ['Validated. Nothing was posted.', JSON.stringify(review, null, 2)]); return; }
+  if (!json) print(null, false, ['Review your ship-log post (public, shown on the listing; followers get it in a daily digest):', JSON.stringify(review, null, 2)]);
+  if (!flags.yes) { interactive(); if (!await confirm('Post this update?', false)) { print(null, json, ['Cancelled. Nothing was posted.']); return; } }
+  const result = await request('/api/v1/cli/ship', 'POST', { ...draft, action: 'post' });
+  print({ success: true, ...result }, json, [result.duplicate ? 'Already posted.' : 'Posted.', String(result.url || '')]);
+}
+
 export async function main(argv = process.argv.slice(2)): Promise<void> {
-  const { command, flags } = args(argv);
+  const { command, flags, text } = args(argv);
   const json = Boolean(flags.json);
   if (flags.help) { process.stdout.write(HELP); return; }
   if (flags.version) { process.stdout.write(`${CLI_VERSION}\n`); return; }
@@ -216,6 +252,7 @@ export async function main(argv = process.argv.slice(2)): Promise<void> {
   if (command === 'submit') return submit(flags);
   if (command === 'status') return status(json);
   if (command === 'update') return update(flags);
+  if (command === 'ship') return ship(text, flags);
   if (command === 'open') {
     const linked = readLinkedProduct();
     const result = linked ? await getListing(linked.type, linked.productId) : {};
