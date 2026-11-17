@@ -27,6 +27,10 @@ const server = createServer(async (req, res) => {
   if (body?.payload?.name === 'Reject me') { res.statusCode = 422; return res.end('{"error":"Invalid listing"}'); }
   if (req.url?.startsWith('/api/v1/cli/submissions?contextId=')) { res.statusCode = 404; return res.end('{"error":"Submission draft not found."}'); }
   if (body?.payload?.name === 'Undeclared account') { res.statusCode = 403; return res.end(JSON.stringify({ error: "Confirm you're 18 or older in your browser before publishing: sign in to Arcapush and open /dashboard.", code: 'declaration_required' })); }
+  if (req.url === '/api/v1/cli/ship') {
+    if (body.action === 'validate') return res.end(JSON.stringify({ success: true, valid: true, review: { type: body.type, id: body.id, listing: 'Test build', body: body.body, link: body.link ?? null } }));
+    res.statusCode = 201; return res.end(JSON.stringify({ success: true, id: 'post-1', duplicate: false, url: 'https://arcapush.com/test-build' }));
+  }
   if (body?.action === 'validate') return res.end(JSON.stringify({ valid: true, contextId: body.contextId }));
   if (body?.action === 'submit') return res.end(JSON.stringify({ success: true, id: 'test-id', slug: 'test-build', type: body.type, status: body.type === 'product' ? 'pending_review' : 'published', href: '/test-build', message: 'Received.' }));
   return res.end(JSON.stringify({ success: true, name: 'Test build', status: 'published', url: 'https://arcapush.com/test-build' }));
@@ -191,4 +195,24 @@ test('MCP configuration defaults to URL and retains explicit local mode', async 
   const local = await run(['mcp-config', '--local']);
   assert.equal(local.code, 0);
   assert.deepEqual(JSON.parse(local.stdout).mcpServers.arcapush.args, ['mcp', '--local']);
+});
+test('ship validates first, needs approval, and posts exactly the reviewed text', async () => {
+  let before = calls.length;
+  const dry = await run(['ship', 'Shipped dark mode.', '--listing', 'agent:abc_123', '--dry-run', '--json']);
+  assert.equal(dry.code, 0, dry.stderr + dry.stdout);
+  assert.equal(JSON.parse(dry.stdout).review.body, 'Shipped dark mode.');
+  assert.deepEqual(calls.slice(before).map(c => c.body.action), ['validate']);
+  before = calls.length;
+  const unapproved = await run(['ship', 'Shipped dark mode.', '--listing', 'agent:abc_123', '--json']);
+  assert.equal(unapproved.code, 1);
+  assert.ok(!calls.slice(before).some(c => c.body?.action === 'post'));
+  before = calls.length;
+  const posted = await run(['ship', 'Shipped dark mode.', '--listing', 'agent:abc_123', '--link', 'https://example.com/changelog', '--yes', '--json']);
+  assert.equal(posted.code, 0, posted.stderr + posted.stdout);
+  const sent = calls.slice(before).map(c => c.body);
+  assert.deepEqual(sent.map(b => b.action), ['validate', 'post']);
+  assert.deepEqual(sent[1], { type: 'agent', id: 'abc_123', body: 'Shipped dark mode.', link: 'https://example.com/changelog', action: 'post' });
+  assert.equal((await run(['ship', 'x'.repeat(501), '--listing', 'agent:abc_123', '--yes', '--json'])).code, 1);
+  assert.equal((await run(['ship', 'ok', '--listing', 'nope', '--yes', '--json'])).code, 1);
+  assert.equal((await run(['ship', 'ok', '--listing', 'agent:abc', '--link', 'http://insecure.test', '--yes', '--json'])).code, 1);
 });
