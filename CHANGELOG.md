@@ -1,15 +1,15 @@
 # Changelog
 
-## Unreleased: ship log
+## 0.3.0 — 2026-11-17
 
-- Add `arcapush ship "…"` to post a short update (at most 500 characters, optional `--link` https URL) to the public ship log of a published listing you own. It uses the linked `arcapush.json` listing or `--listing TYPE:ID`, validates on the server first, shows the exact post and asks before posting. `--dry-run` validates only; `--yes` and `--json` work as for `submit`.
-- Needs the server endpoint `/api/v1/cli/ship` (Arcapush web, v4 ship log). Publish only after that is deployed.
+### Added
 
-## Unreleased: remote MCP
+- `arcapush ship "…"` posts a short update (at most 500 characters, optional `--link` https URL) to the public ship log of a published listing you own. It uses the linked `arcapush.json` listing or `--listing TYPE:ID`, validates on the server first, shows the exact post and asks before posting. `--dry-run` validates only; `--yes` and `--json` work as for `submit`. Uses the server endpoint `/api/v1/cli/ship` (Arcapush web, v4 ship log).
+- URL-based configuration and an OAuth-authorized stdio bridge to the hosted MCP service at `https://mcp.arcapush.com/mcp`.
 
-- Add a URL-based configuration and OAuth-authorized stdio bridge to the hosted MCP service.
-- Keep local project tools under `mcp --local`; migrate existing configs before upgrading.
-- Gate publication on companion service deployment and live verification.
+### Changed
+
+- Local project tools move under `mcp --local`; migrate existing configs before upgrading.
 
 ## 0.2.4 — 2026-10-08
 

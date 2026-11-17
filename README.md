@@ -33,7 +33,7 @@ To run the current stable version without a global install:
 npx --yes @blindspotlab/arcapush@latest
 ```
 
-This package release is **0.2.4**. The CLI and website have separate version numbers.
+This package release is **0.3.0**. The CLI and website have separate version numbers.
 
 ### Still seeing the old menu?
 

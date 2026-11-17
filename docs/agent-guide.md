@@ -1,6 +1,6 @@
 # Arcapush agent guide
 
-Package: @blindspotlab/arcapush 0.2.4. Runtime: Node.js >=22. Transport: hosted Streamable HTTP; local stdio is available explicitly with --local. See remote-mcp.md for the deployment gate and migration. Copyright 2026 BlindspotLab Limited. Licence: Apache-2.0; legacy MIT notice preserved.
+Package: @blindspotlab/arcapush 0.3.0. Runtime: Node.js >=22. Transport: hosted Streamable HTTP; local stdio is available explicitly with --local. See remote-mcp.md for the deployment gate and migration. Copyright 2026 BlindspotLab Limited. Licence: Apache-2.0; legacy MIT notice preserved.
 
 1. Connect https://mcp.arcapush.com/mcp using browser OAuth in a supported client after deployment verification. No CLI install is needed for browser clients. For the terminal bridge, the human runs `arcapush mcp-login`. Never request an account token in chat.
 2. URL clients connect directly. For stdio-only hosts, `arcapush mcp` bridges to the hosted service. For the original local server, run `arcapush login` then `arcapush mcp --local --project-dir /absolute/project/path`. The agent cannot change this root through a tool argument.
